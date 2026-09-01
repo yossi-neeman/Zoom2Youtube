@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - FLASK_ENV=production
+    env_file:
+      - credentials/.env
+    volumes:
+      - ./credentials:/app/credentials
+      - ./recordings:/app/recordings
+      - ./static:/app/static
+    command: python web_app.py
+    restart: unless-stopped
+
+  cli:
+    build: .
+    env_file:
+      - credentials/.env
+    volumes:
+      - ./credentials:/app/credentials
+      - ./recordings:/app/recordings
+    command: python zoom_to_youtube.py
+    profiles:
+      - cli

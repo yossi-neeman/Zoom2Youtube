@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom to YouTube</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .recordings-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .recording-item {
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .recording-item:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .recording-item.selected {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .recording-item h3 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .recording-item p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .thumbnail-preview {
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        .thumbnail-preview img {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .progress {
+            background: #e0e0e0;
+            border-radius: 8px;
+            height: 30px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+
+        .progress-bar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+
+            .tab {
+                flex: 1;
+                min-width: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📹 Zoom to YouTube</h1>
+            <p>Automatically download Zoom recordings and upload to YouTube</p>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('recordings')">📥 Recordings</button>
+                <button class="tab" onclick="switchTab('upload')">📤 Upload</button>
+                <button class="tab" onclick="switchTab('settings')">⚙️ Settings</button>
+            </div>
+
+            <!-- Recordings Tab -->
+            <div id="recordings-tab" class="tab-content active">
+                <h2>Available Zoom Recordings</h2>
+                <div class="form-group">
+                    <label>Show recordings from last:</label>
+                    <select id="daysFilter" onchange="loadRecordings()">
+                        <option value="1">1 day</option>
+                        <option value="5" selected>5 days</option>
+                        <option value="7">7 days</option>
+                        <option value="30">30 days</option>
+                    </select>
+                </div>
+                <div id="recordingsContainer" class="recordings-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading recordings...</p>
+                    </div>
+                </div>
+                <button class="btn" onclick="downloadSelected()" id="downloadBtn" style="display:none; margin-top: 20px;">
+                    Download Selected
+                </button>
+            </div>
+
+            <!-- Upload Tab -->
+            <div id="upload-tab" class="tab-content">
+                <h2>Upload to YouTube</h2>
+                <form id="uploadForm" onsubmit="handleUpload(event)">
+                    <div class="form-group">
+                        <label>Video Title *</label>
+                        <input type="text" id="videoTitle" required placeholder="Enter video title">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="videoDescription" rows="4" placeholder="Optional description"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Privacy</label>
+                        <select id="videoPrivacy">
+                            <option value="private">Private</option>
+                            <option value="unlisted">Unlisted</option>
+                            <option value="public">Public</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Playlist (Optional)</label>
+                        <select id="videoPlaylist">
+                            <option value="">No playlist</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Thumbnail Text (Hebrew)</label>
+                        <input type="text" id="thumbnailText" placeholder="חולין קיט" dir="rtl">
+                        <button type="button" class="btn btn-secondary" onclick="previewThumbnail()" style="margin-top: 10px;">
+                            Preview Thumbnail
+                        </button>
+                        <div id="thumbnailPreview" class="thumbnail-preview"></div>
+                    </div>
+
+                    <button type="submit" class="btn" id="uploadBtn">Upload to YouTube</button>
+
+                    <div id="uploadProgress" style="display:none;">
+                        <div class="progress">
+                            <div class="progress-bar" id="progressBar">0%</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                <h2>Settings</h2>
+                <div class="form-group">
+                    <label>Default Privacy</label>
+                    <select id="defaultPrivacy">
+                        <option value="private">Private</option>
+                        <option value="unlisted">Unlisted</option>
+                        <option value="public">Public</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Auto-generate Thumbnails</label>
+                    <select id="autoThumbnail">
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+
+                <button class="btn" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+
+        <div id="alertContainer"></div>
+    </div>
+
+    <script>
+        let selectedRecording = null;
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            if (tabName === 'upload') {
+                loadPlaylists();
+            }
+        }
+
+        // Load recordings
+        async function loadRecordings() {
+            const days = document.getElementById('daysFilter').value;
+            const container = document.getElementById('recordingsContainer');
+            
+            container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading recordings...</p></div>';
+
+            try {
+                const response = await fetch(`/api/recordings?days=${days}`);
+                const data = await response.json();
+
+                if (data.success && data.recordings.length > 0) {
+                    container.innerHTML = data.recordings.map(rec => `
+                        <div class="recording-item" onclick="selectRecording('${rec.id}', this)">
+                            <h3>${rec.topic}</h3>
+                            <p>📅 ${new Date(rec.start_time).toLocaleString()} • ⏱️ ${rec.duration} min</p>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p>No recordings found in the selected time range.</p>';
+                }
+            } catch (error) {
+                showAlert('Error loading recordings: ' + error.message, 'error');
+                container.innerHTML = '<p>Error loading recordings. Please try again.</p>';
+            }
+        }
+
+        function selectRecording(id, element) {
+            document.querySelectorAll('.recording-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            element.classList.add('selected');
+            selectedRecording = id;
+            document.getElementById('downloadBtn').style.display = 'block';
+        }
+
+        async function downloadSelected() {
+            if (!selectedRecording) return;
+
+            const btn = document.getElementById('downloadBtn');
+            btn.disabled = true;
+            btn.textContent = 'Downloading...';
+
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({recording_id: selectedRecording})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Recording downloaded successfully!', 'success');
+                    switchTab('upload');
+                } else {
+                    showAlert('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error downloading: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Download Selected';
+            }
+        }
+
+        // Load playlists
+        async function loadPlaylists() {
+            try {
+                const response = await fetch('/api/playlists');
+                const data = await response.json();
+
+                if (data.success) {
+                    const select = document.getElementById('videoPlaylist');
+                    select.innerHTML = '<option value="">No playlist</option>' +
+                        data.playlists.map(pl => `<option value="${pl.id}">${pl.title} (${pl.item_count} videos)</option>`).join('');
+                }
+            } catch (error) {
+                console.error('Error loading playlists:', error);
+            }
+        }
+
+        // Preview thumbnail
+        async function previewThumbnail() {
+            const text = document.getElementById('thumbnailText').value;
+            if (!text) {
+                showAlert('Please enter thumbnail text', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/thumbnail/preview', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('thumbnailPreview').innerHTML = 
+                        `<img src="${data.preview_url}" alt="Thumbnail Preview">`;
+                } else {
+                    showAlert('Error generating preview: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Handle upload
+        async function handleUpload(event) {
+            event.preventDefault();
+
+            const formData = {
+                video_file: 'path/to/video', // This would come from download
+                title: document.getElementById('videoTitle').value,
+                description: document.getElementById('videoDescription').value,
+                privacy: document.getElementById('videoPrivacy').value,
+                playlist_id: document.getElementById('videoPlaylist').value || null,
+                thumbnail_text: document.getElementById('thumbnailText').value
+            };
+
+            const progressDiv = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('progressBar');
+            const uploadBtn = document.getElementById('uploadBtn');
+
+            uploadBtn.disabled = true;
+            progressDiv.style.display = 'block';
+            progressBar.style.width = '30%';
+            progressBar.textContent = '30%';
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+
+                if (data.success) {
+                    showAlert(`Video uploaded successfully! <a href="${data.video_url}" target="_blank">View on YouTube</a>`, 'success');
+                    document.getElementById('uploadForm').reset();
+                } else {
+                    showAlert('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error uploading: ' + error.message, 'error');
+            } finally {
+                uploadBtn.disabled = false;
+                setTimeout(() => {
+                    progressDiv.style.display = 'none';
+                    progressBar.style.width = '0%';
+                }, 2000);
+            }
+        }
+
+        // Save settings
+        async function saveSettings() {
+            const settings = {
+                default_privacy: document.getElementById('defaultPrivacy').value,
+                auto_thumbnail: document.getElementById('autoThumbnail').value === 'true'
+            };
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(settings)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Settings saved successfully!', 'success');
+                } else {
+                    showAlert('Error saving settings: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Show alert
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = message;
+            container.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Load recordings on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadRecordings();
+        });
+    </script>
+</body>
+</html>
