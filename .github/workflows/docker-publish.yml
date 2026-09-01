@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_IMAGE: yossineeman/zoom2youtube
+  DOCKER_IMAGE: neeman2019/zoom2youtube
 
 jobs:
   build-and-push:

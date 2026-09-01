@@ -27,7 +27,7 @@ This guide explains how to set up automatic Docker image builds and publishing t
 
    **Secret 1:**
    - Name: `DOCKER_USERNAME`
-   - Value: `yossineeman` (your Docker Hub username)
+   - Value: `neeman2019` (your Docker Hub username)
 
    **Secret 2:**
    - Name: `DOCKER_PASSWORD`
@@ -68,14 +68,14 @@ Once the workflow runs successfully, anyone can pull and run:
 
 ```bash
 # Pull the latest image
-docker pull yossineeman/zoom2youtube:latest
+docker pull neeman2019/zoom2youtube:latest
 
 # Run it
 docker run -it --rm \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/recordings:/app/recordings \
   -e ENV_FILE=/app/credentials/.env \
-  yossineeman/zoom2youtube:latest
+  neeman2019/zoom2youtube:latest
 ```
 
 ## Monitoring Builds
@@ -95,10 +95,10 @@ git push origin v1.0.0
 ```
 
 This will create Docker images with tags:
-- `yossineeman/zoom2youtube:v1.0.0`
-- `yossineeman/zoom2youtube:v1.0`
-- `yossineeman/zoom2youtube:v1`
-- `yossineeman/zoom2youtube:latest`
+- `neeman2019/zoom2youtube:v1.0.0`
+- `neeman2019/zoom2youtube:v1.0`
+- `neeman2019/zoom2youtube:v1`
+- `neeman2019/zoom2youtube:latest`
 
 ## Troubleshooting
 
@@ -108,14 +108,14 @@ This will create Docker images with tags:
 
 ### Image not appearing on Docker Hub
 - Check the Actions tab for error messages
-- Verify your Docker Hub username is `yossineeman`
+- Verify your Docker Hub username is `neeman2019`
 - Make sure the repository exists or set it to auto-create
 
 ### Want to change the Docker Hub username?
 Edit `.github/workflows/docker-publish.yml` and change:
 ```yaml
 env:
-  DOCKER_IMAGE: your-username/zoom2youtube
+  DOCKER_IMAGE: neeman2019/zoom2youtube
 ```
 
 ## Security Notes
