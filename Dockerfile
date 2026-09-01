@@ -4,6 +4,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     fonts-liberation \
+    fontconfig \
     wget \
     unzip \
     && rm -rf /var/lib/apt/lists/*
