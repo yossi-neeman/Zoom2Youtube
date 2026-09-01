@@ -1,1 +1,53 @@
-file:///Users/yossin/workspace/Zoom2Youtube/.gitignore
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+ENV/
+env/
+
+# Zoom recordings
+recordings/
+
+# Credentials and tokens
+credentials/
+*.pickle
+.env
+client_secrets.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.tar.gz
+
+# Web app
+web_config.json
+static/thumbnails/*.jpg
+static/thumbnails/*.png
+!static/thumbnails/.gitkeep
