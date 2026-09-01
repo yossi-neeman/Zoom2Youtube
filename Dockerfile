@@ -1,12 +1,21 @@
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies and build tools
 RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     fonts-liberation \
     fontconfig \
     wget \
     unzip \
+    gcc \
+    g++ \
+    libjpeg-dev \
+    zlib1g-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libopenjp2-7-dev \
+    libtiff-dev \
+    libwebp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install David Libre Hebrew font
