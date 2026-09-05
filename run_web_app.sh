@@ -9,10 +9,18 @@ if [ ! -d "venv" ]; then
 fi
 
 # Load environment variables from .env if it exists
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | grep -v '^$' | xargs)
-elif [ -f credentials/.env ]; then
-    export $(grep -v '^#' credentials/.env | grep -v '^$' | xargs)
+if [ -f credentials/.env ]; then
+    set -a
+    source credentials/.env
+    set +a
+    echo "✓ Loaded credentials from credentials/.env"
+elif [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+    echo "✓ Loaded credentials from .env"
+else
+    echo "⚠ Warning: No .env file found. Please create credentials/.env with your API keys."
 fi
 
 echo "======================================================================" 

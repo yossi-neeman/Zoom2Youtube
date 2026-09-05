@@ -34,7 +34,9 @@ class YouTubeUploader:
         Authenticate with YouTube using OAuth 2.0.
         Uses saved credentials if available, otherwise starts OAuth flow.
         """
-        token_file = 'youtube_token.pickle'
+        # Look for token file in the same directory as client_secrets
+        client_secrets_dir = os.path.dirname(self.client_secrets_file) or '.'
+        token_file = os.path.join(client_secrets_dir, 'youtube_token.pickle')
 
         # Load saved credentials if they exist
         if os.path.exists(token_file):

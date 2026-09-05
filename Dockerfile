@@ -37,13 +37,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY zoom_downloader.py .
 COPY youtube_uploader.py .
 COPY zoom_to_youtube.py .
+COPY web_app.py .
 COPY graphics_template.jpg .
+
+# Copy web app directories
+COPY templates/ ./templates/
+COPY static/ ./static/
 
 # Create directories for output and credentials
 RUN mkdir -p /app/recordings /app/credentials
 
 # Set environment variables (can be overridden at runtime)
 ENV PYTHONUNBUFFERED=1
+ENV PORT=5000
 
-# Default command
-CMD ["python", "zoom_to_youtube.py"]
+# Expose port for web app
+EXPOSE 5000
+
+# Default command (runs web app, can be overridden for CLI)
+CMD ["python", "web_app.py"]
