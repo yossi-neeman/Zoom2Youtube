@@ -302,6 +302,13 @@
             <!-- Upload Tab -->
             <div id="upload-tab" class="tab-content">
                 <h2>Upload to YouTube</h2>
+                
+                <!-- Downloaded Recording Info -->
+                <div id="downloadedRecordingInfo" style="display:none; padding: 15px; background: #f0f8ff; border-left: 4px solid #667eea; margin-bottom: 20px; border-radius: 4px;">
+                    <h3 style="margin-top: 0; color: #333; font-size: 1.1rem;">📹 Downloaded Recording</h3>
+                    <p id="recordingInfoText" style="margin: 5px 0; color: #555;"></p>
+                </div>
+
                 <form id="uploadForm" onsubmit="handleUpload(event)">
                     <div class="form-group">
                         <label>Video Title *</label>
@@ -332,10 +339,6 @@
                     <div class="form-group">
                         <label>Thumbnail Text (Hebrew)</label>
                         <input type="text" id="thumbnailText" placeholder="חולין קיט" dir="rtl">
-                        <button type="button" class="btn btn-secondary" onclick="previewThumbnail()" style="margin-top: 10px;">
-                            Preview Thumbnail
-                        </button>
-                        <div id="thumbnailPreview" class="thumbnail-preview"></div>
                     </div>
 
                     <button type="submit" class="btn" id="uploadBtn">Upload to YouTube</button>
@@ -344,6 +347,12 @@
                         <div class="progress">
                             <div class="progress-bar" id="progressBar">0%</div>
                         </div>
+                    </div>
+                    
+                    <div id="uploadSuccess" style="display:none; margin-top: 20px; padding: 20px; background: #d4edda; border: 2px solid #28a745; border-radius: 8px; text-align: center;">
+                        <h3 style="color: #155724; margin-top: 0;">✓ Upload Complete!</h3>
+                        <p id="uploadSuccessMessage" style="color: #155724; margin: 10px 0;"></p>
+                        <button type="button" class="btn" onclick="dismissUploadSuccess()" style="margin-top: 15px; background: #28a745;">OK</button>
                     </div>
                 </form>
             </div>
@@ -378,6 +387,8 @@
     <script>
         let selectedRecording = null;
         let selectedVideoFile = null;
+        let selectedRecordingInfo = null;
+        let recordingsData = [];
 
         // Tab switching
         function switchTab(tabName, event) {
@@ -413,8 +424,9 @@
                 const data = await response.json();
 
                 if (data.success && data.recordings.length > 0) {
-                    container.innerHTML = data.recordings.map(rec => `
-                        <div class="recording-item" onclick="selectRecording('${rec.id}', this)">
+                    recordingsData = data.recordings;
+                    container.innerHTML = data.recordings.map((rec, idx) => `
+                        <div class="recording-item" onclick="selectRecording(${idx}, this)">
                             <h3>${rec.topic}</h3>
                             <p>📅 ${new Date(rec.start_time).toLocaleString()} • ⏱️ ${rec.duration} min</p>
                         </div>
@@ -428,12 +440,20 @@
             }
         }
 
-        function selectRecording(id, element) {
+        function selectRecording(index, element) {
             document.querySelectorAll('.recording-item').forEach(item => {
                 item.classList.remove('selected');
             });
             element.classList.add('selected');
-            selectedRecording = id;
+            
+            const recording = recordingsData[index];
+            selectedRecording = recording.id;
+            selectedRecordingInfo = {
+                topic: recording.topic,
+                startTime: recording.start_time,
+                duration: recording.duration
+            };
+            
             document.getElementById('downloadBtn').style.display = 'block';
         }
 
@@ -471,6 +491,9 @@
                     // Store the filepath for upload
                     selectedVideoFile = data.filepath;
                     
+                    // Display recording info in upload tab
+                    showDownloadedRecordingInfo();
+                    
                     switchTab('upload');
                 } else {
                     showAlert('Error: ' + data.error, 'error');
@@ -482,6 +505,20 @@
                 clearInterval(progressInterval);
                 btn.disabled = false;
                 btn.textContent = originalText;
+            }
+        }
+
+        // Show downloaded recording info
+        function showDownloadedRecordingInfo() {
+            if (selectedRecordingInfo) {
+                const infoDiv = document.getElementById('downloadedRecordingInfo');
+                const infoText = document.getElementById('recordingInfoText');
+                
+                const dateTime = new Date(selectedRecordingInfo.startTime).toLocaleString();
+                infoText.innerHTML = `<strong>${selectedRecordingInfo.topic}</strong><br>` +
+                                    `📅 ${dateTime} • ⏱️ ${selectedRecordingInfo.duration} minutes`;
+                
+                infoDiv.style.display = 'block';
             }
         }
 
@@ -502,32 +539,6 @@
         }
 
         // Preview thumbnail
-        async function previewThumbnail() {
-            const text = document.getElementById('thumbnailText').value;
-            if (!text) {
-                showAlert('Please enter thumbnail text', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/thumbnail/preview', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({text})
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    document.getElementById('thumbnailPreview').innerHTML = 
-                        `<img src="${data.preview_url}" alt="Thumbnail Preview">`;
-                } else {
-                    showAlert('Error generating preview: ' + data.error, 'error');
-                }
-            } catch (error) {
-                showAlert('Error: ' + error.message, 'error');
-            }
-        }
 
         // Handle upload
         async function handleUpload(event) {
@@ -569,24 +580,54 @@
                 progressBar.style.width = '100%';
                 progressBar.textContent = 'Complete!';
 
-                if (data.success) {
-                    showAlert(`✓ Video uploaded successfully! Video has been deleted from storage. <a href="${data.video_url}" target="_blank">View on YouTube</a>`, 'success');
-                    document.getElementById('uploadForm').reset();
-                    selectedVideoFile = null;
-                    selectedRecording = null;
-                } else {
-                    showAlert('Error: ' + data.error, 'error');
-                }
-            } catch (error) {
-                showAlert('Error uploading: ' + error.message, 'error');
-            } finally {
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = 'Upload to YouTube';
+                // Hide progress bar
                 setTimeout(() => {
                     progressDiv.style.display = 'none';
                     progressBar.style.width = '0%';
-                }, 2000);
+                }, 1000);
+
+                if (data.success) {
+                    // Show persistent success message
+                    const successDiv = document.getElementById('uploadSuccess');
+                    const successMsg = document.getElementById('uploadSuccessMessage');
+                    successMsg.innerHTML = `Video has been uploaded and deleted from storage.<br>` +
+                                          `<a href="${data.video_url}" target="_blank" style="color: #155724; font-weight: bold; text-decoration: underline;">View on YouTube</a>`;
+                    successDiv.style.display = 'block';
+                    
+                    // Hide the form and uploaded recording info
+                    document.getElementById('uploadForm').querySelector('button[type="submit"]').style.display = 'none';
+                    document.querySelectorAll('#uploadForm .form-group').forEach(el => el.style.display = 'none');
+                    document.getElementById('downloadedRecordingInfo').style.display = 'none';
+                } else {
+                    showAlert('Error: ' + data.error, 'error');
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = 'Upload to YouTube';
+                }
+            } catch (error) {
+                showAlert('Error uploading: ' + error.message, 'error');
+                progressDiv.style.display = 'none';
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload to YouTube';
             }
+        }
+
+        // Dismiss upload success and reset UI
+        function dismissUploadSuccess() {
+            // Hide success message
+            document.getElementById('uploadSuccess').style.display = 'none';
+            
+            // Reset form and show it again
+            document.getElementById('uploadForm').reset();
+            document.getElementById('uploadForm').querySelector('button[type="submit"]').style.display = 'block';
+            document.querySelectorAll('#uploadForm .form-group').forEach(el => el.style.display = 'block');
+            
+            // Clear state
+            selectedVideoFile = null;
+            selectedRecording = null;
+            selectedRecordingInfo = null;
+            
+            // Go back to recordings tab
+            switchTab('recordings');
         }
 
         // Save settings
