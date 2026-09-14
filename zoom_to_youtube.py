@@ -46,7 +46,7 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     draw = ImageDraw.Draw(img)
 
     # Try to use a font that supports Hebrew
-    font_size = 180  # Font size for thumbnail text
+    font_size = 280  # Font size for thumbnail text
     try:
         # Try David Libre and other Hebrew-supporting fonts (in order of preference)
         font_paths = [
