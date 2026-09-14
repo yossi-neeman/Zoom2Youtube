@@ -759,8 +759,11 @@
                     // Show persistent success message
                     const successDiv = document.getElementById('uploadSuccess');
                     const successMsg = document.getElementById('uploadSuccessMessage');
-                    successMsg.innerHTML = `Video has been uploaded and deleted from storage.<br>` +
-                                          `<a href="${data.video_url}" target="_blank" style="color: #155724; font-weight: bold; text-decoration: underline;">View on YouTube</a>`;
+                    successMsg.innerHTML = `Video has been uploaded and deleted from storage.<br><br>` +
+                                          `<div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">` +
+                                          `<a href="${data.video_url}" target="_blank" style="color: #155724; font-weight: bold; text-decoration: underline;">View on YouTube</a>` +
+                                          `<button onclick="copyToClipboard('${data.video_url}')" class="btn" style="padding: 5px 15px; font-size: 0.9rem; background: #155724;">Copy URL</button>` +
+                                          `</div>`;
                     successDiv.style.display = 'block';
                     
                     // Hide the form and uploaded recording info
@@ -799,6 +802,28 @@
             
             // Go back to recordings tab
             switchTab('recordings');
+        }
+
+        // Copy text to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showAlert('URL copied to clipboard!', 'success');
+            }).catch(err => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showAlert('URL copied to clipboard!', 'success');
+                } catch (err) {
+                    showAlert('Failed to copy URL', 'error');
+                }
+                document.body.removeChild(textArea);
+            });
         }
 
         // Save settings
