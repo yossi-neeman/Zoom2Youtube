@@ -171,6 +171,24 @@
             justify-content: center;
             color: white;
             font-weight: 600;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-bar.active::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
 
         .alert {
@@ -311,8 +329,95 @@
 
                 <form id="uploadForm" onsubmit="handleUpload(event)">
                     <div class="form-group">
+                        <label>מסכת *</label>
+                        <select id="masechetSelect" required onchange="updateTitleAndThumbnail()">
+                            <option value="">בחר מסכת...</option>
+                            <optgroup label="סדר זרעים">
+                                <option value="ברכות">ברכות</option>
+                                <option value="פאה">פאה</option>
+                                <option value="דמאי">דמאי</option>
+                                <option value="כלאים">כלאים</option>
+                                <option value="שביעית">שביעית</option>
+                                <option value="תרומות">תרומות</option>
+                                <option value="מעשרות">מעשרות</option>
+                                <option value="מעשר שני">מעשר שני</option>
+                                <option value="חלה">חלה</option>
+                                <option value="ערלה">ערלה</option>
+                                <option value="בכורים">בכורים</option>
+                            </optgroup>
+                            <optgroup label="סדר מועד">
+                                <option value="שבת">שבת</option>
+                                <option value="עירובין">עירובין</option>
+                                <option value="פסחים">פסחים</option>
+                                <option value="שקלים">שקלים</option>
+                                <option value="יומא">יומא</option>
+                                <option value="סוכה">סוכה</option>
+                                <option value="ביצה">ביצה</option>
+                                <option value="ראש השנה">ראש השנה</option>
+                                <option value="תענית">תענית</option>
+                                <option value="מגילה">מגילה</option>
+                                <option value="מועד קטן">מועד קטן</option>
+                                <option value="חגיגה">חגיגה</option>
+                            </optgroup>
+                            <optgroup label="סדר נשים">
+                                <option value="יבמות">יבמות</option>
+                                <option value="כתובות">כתובות</option>
+                                <option value="נדרים">נדרים</option>
+                                <option value="נזיר">נזיר</option>
+                                <option value="סוטה">סוטה</option>
+                                <option value="גיטין">גיטין</option>
+                                <option value="קידושין">קידושין</option>
+                            </optgroup>
+                            <optgroup label="סדר נזיקין">
+                                <option value="בבא קמא">בבא קמא</option>
+                                <option value="בבא מציעא">בבא מציעא</option>
+                                <option value="בבא בתרא">בבא בתרא</option>
+                                <option value="סנהדרין">סנהדרין</option>
+                                <option value="מכות">מכות</option>
+                                <option value="שבועות">שבועות</option>
+                                <option value="עדויות">עדויות</option>
+                                <option value="עבודה זרה">עבודה זרה</option>
+                                <option value="אבות">אבות</option>
+                                <option value="הוריות">הוריות</option>
+                            </optgroup>
+                            <optgroup label="סדר קדשים">
+                                <option value="זבחים">זבחים</option>
+                                <option value="מנחות">מנחות</option>
+                                <option value="חולין">חולין</option>
+                                <option value="בכורות">בכורות</option>
+                                <option value="ערכין">ערכין</option>
+                                <option value="תמורה">תמורה</option>
+                                <option value="כריתות">כריתות</option>
+                                <option value="מעילה">מעילה</option>
+                                <option value="תמיד">תמיד</option>
+                                <option value="מדות">מדות</option>
+                                <option value="קינים">קינים</option>
+                            </optgroup>
+                            <optgroup label="סדר טהרות">
+                                <option value="כלים">כלים</option>
+                                <option value="אהלות">אהלות</option>
+                                <option value="נגעים">נגעים</option>
+                                <option value="פרה">פרה</option>
+                                <option value="טהרות">טהרות</option>
+                                <option value="מקוואות">מקוואות</option>
+                                <option value="נדה">נדה</option>
+                                <option value="מכשירין">מכשירין</option>
+                                <option value="זבים">זבים</option>
+                                <option value="טבול יום">טבול יום</option>
+                                <option value="ידים">ידים</option>
+                                <option value="עוקצים">עוקצים</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>דף *</label>
+                        <input type="text" id="dafInput" required placeholder="קיט" dir="rtl" oninput="updateTitleAndThumbnail()">
+                    </div>
+
+                    <div class="form-group">
                         <label>Video Title *</label>
-                        <input type="text" id="videoTitle" required placeholder="Enter video title">
+                        <input type="text" id="videoTitle" required placeholder="Will be auto-generated" readonly style="background-color: #f5f5f5;">
                     </div>
 
                     <div class="form-group">
@@ -325,7 +430,7 @@
                         <select id="videoPrivacy">
                             <option value="private">Private</option>
                             <option value="unlisted">Unlisted</option>
-                            <option value="public">Public</option>
+                            <option value="public" selected>Public</option>
                         </select>
                     </div>
 
@@ -338,7 +443,7 @@
 
                     <div class="form-group">
                         <label>Thumbnail Text (Hebrew)</label>
-                        <input type="text" id="thumbnailText" placeholder="חולין קיט" dir="rtl">
+                        <input type="text" id="thumbnailText" placeholder="Will be auto-generated" dir="rtl" readonly style="background-color: #f5f5f5;">
                     </div>
 
                     <button type="submit" class="btn" id="uploadBtn">Upload to YouTube</button>
@@ -409,6 +514,7 @@
 
             if (tabName === 'upload') {
                 loadPlaylists();
+                loadSavedValues();
             }
         }
 
@@ -522,6 +628,43 @@
             }
         }
 
+        // Update title and thumbnail based on מסכת and דף
+        function updateTitleAndThumbnail() {
+            const masechet = document.getElementById('masechetSelect').value;
+            const daf = document.getElementById('dafInput').value;
+            
+            if (masechet && daf) {
+                // Format: מסכת | דף | בית כנסת נריה
+                const title = `${masechet} | ${daf} | בית כנסת נריה`;
+                document.getElementById('videoTitle').value = title;
+                
+                // Format: מסכת - דף
+                const thumbnail = `${masechet} - ${daf}`;
+                document.getElementById('thumbnailText').value = thumbnail;
+                
+                // Save to localStorage
+                localStorage.setItem('lastMasechet', masechet);
+                localStorage.setItem('lastDaf', daf);
+            }
+        }
+        
+        // Load saved מסכת and דף
+        function loadSavedValues() {
+            const savedMasechet = localStorage.getItem('lastMasechet');
+            const savedDaf = localStorage.getItem('lastDaf');
+            
+            if (savedMasechet) {
+                document.getElementById('masechetSelect').value = savedMasechet;
+            }
+            if (savedDaf) {
+                document.getElementById('dafInput').value = savedDaf;
+            }
+            
+            if (savedMasechet && savedDaf) {
+                updateTitleAndThumbnail();
+            }
+        }
+
         // Load playlists
         async function loadPlaylists() {
             try {
@@ -532,6 +675,12 @@
                     const select = document.getElementById('videoPlaylist');
                     select.innerHTML = '<option value="">No playlist</option>' +
                         data.playlists.map(pl => `<option value="${pl.id}">${pl.title} (${pl.item_count} videos)</option>`).join('');
+                    
+                    // Auto-select playlist with "חולין" in the title
+                    const chulinPlaylist = data.playlists.find(pl => pl.title.includes('חולין'));
+                    if (chulinPlaylist) {
+                        select.value = chulinPlaylist.id;
+                    }
                 }
             } catch (error) {
                 console.error('Error loading playlists:', error);
@@ -565,8 +714,24 @@
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'Uploading...';
             progressDiv.style.display = 'block';
-            progressBar.style.width = '30%';
-            progressBar.textContent = 'Uploading to YouTube...';
+            progressBar.style.width = '10%';
+            progressBar.textContent = 'Uploading to YouTube';
+            progressBar.classList.add('active');
+            
+            // Animate progress bar while uploading
+            let progress = 10;
+            let dots = 0;
+            const uploadInterval = setInterval(() => {
+                dots = (dots + 1) % 4;
+                const dotString = '.'.repeat(dots);
+                progressBar.textContent = 'Uploading to YouTube' + dotString;
+                
+                // Gradually increase progress to 90% (never reach 100 until done)
+                if (progress < 90) {
+                    progress += Math.random() * 3;
+                    progressBar.style.width = Math.min(progress, 90) + '%';
+                }
+            }, 500);
 
             try {
                 const response = await fetch('/api/upload', {
@@ -576,6 +741,10 @@
                 });
 
                 const data = await response.json();
+                
+                // Stop animation
+                clearInterval(uploadInterval);
+                progressBar.classList.remove('active');
 
                 progressBar.style.width = '100%';
                 progressBar.textContent = 'Complete!';
@@ -604,6 +773,8 @@
                     uploadBtn.textContent = 'Upload to YouTube';
                 }
             } catch (error) {
+                clearInterval(uploadInterval);
+                progressBar.classList.remove('active');
                 showAlert('Error uploading: ' + error.message, 'error');
                 progressDiv.style.display = 'none';
                 uploadBtn.disabled = false;
@@ -670,6 +841,7 @@
         // Load recordings on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadRecordings();
+            loadSavedValues();
         });
     </script>
 </body>
