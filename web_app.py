@@ -346,6 +346,38 @@ def preview_thumbnail():
         }), 500
 
 
+@app.route('/api/debug/thumbnail', methods=['POST'])
+def debug_thumbnail():
+    """Generate test thumbnail for debugging"""
+    try:
+        data = request.json
+        text = data.get('text', '')
+        font_size = data.get('font_size', 450)
+        
+        if not text:
+            return jsonify({'success': False, 'error': 'Text required'}), 400
+        
+        # Generate debug thumbnail
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        debug_file = f'static/debug_thumbnail_{timestamp}.jpg'
+        
+        # Import and modify create_thumbnail temporarily
+        from zoom_to_youtube import create_thumbnail_with_size
+        create_thumbnail_with_size(text, debug_file, 'graphics_template.jpg', font_size)
+        
+        return jsonify({
+            'success': True,
+            'thumbnail_path': debug_file,
+            'font_size': font_size
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/config', methods=['GET', 'POST'])
 def config():
     """Get or update configuration"""

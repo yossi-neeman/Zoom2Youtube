@@ -292,6 +292,7 @@
                 <button class="tab active" onclick="switchTab('recordings', event)">📥 Recordings</button>
                 <button class="tab" onclick="switchTab('upload', event)">📤 Upload</button>
                 <button class="tab" onclick="switchTab('settings', event)">⚙️ Settings</button>
+                <button class="tab" onclick="switchTab('debug', event)">🔧 Debug</button>
             </div>
 
             <!-- Recordings Tab -->
@@ -483,6 +484,35 @@
                 </div>
 
                 <button class="btn" onclick="saveSettings()">Save Settings</button>
+            </div>
+
+            <!-- Debug Tab -->
+            <div id="debug-tab" class="tab-content">
+                <h2>🔧 Debug - Thumbnail Testing</h2>
+                <p style="color: #666; margin-bottom: 20px;">Test thumbnail generation with different text to find the perfect look.</p>
+                
+                <div class="form-group">
+                    <label>Test Text (Hebrew)</label>
+                    <input type="text" id="debugThumbnailText" placeholder="חולין - קיט" dir="rtl" value="חולין - קיט">
+                </div>
+
+                <div class="form-group">
+                    <label>Font Size</label>
+                    <input type="number" id="debugFontSize" value="450" min="100" max="800" step="10">
+                    <small style="display: block; margin-top: 5px; color: #666;">Current default: 450px</small>
+                </div>
+
+                <button class="btn" onclick="generateTestThumbnail()">Generate Test Thumbnail</button>
+
+                <div id="debugThumbnailResult" style="display:none; margin-top: 30px;">
+                    <h3>Generated Thumbnail:</h3>
+                    <div style="border: 2px solid #ddd; padding: 10px; border-radius: 8px; background: #f9f9f9;">
+                        <img id="debugThumbnailPreview" style="width: 100%; max-width: 800px; height: auto; border-radius: 4px;">
+                    </div>
+                    <p style="margin-top: 10px; color: #666;">
+                        <strong>File saved to:</strong> <code id="debugThumbnailPath"></code>
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -846,6 +876,46 @@
                     showAlert('Settings saved successfully!', 'success');
                 } else {
                     showAlert('Error saving settings: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Generate test thumbnail
+        async function generateTestThumbnail() {
+            const text = document.getElementById('debugThumbnailText').value;
+            const fontSize = document.getElementById('debugFontSize').value;
+
+            if (!text) {
+                showAlert('Please enter test text', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/debug/thumbnail', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        text: text,
+                        font_size: parseInt(fontSize)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const resultDiv = document.getElementById('debugThumbnailResult');
+                    const preview = document.getElementById('debugThumbnailPreview');
+                    const path = document.getElementById('debugThumbnailPath');
+                    
+                    preview.src = '/' + data.thumbnail_path + '?t=' + new Date().getTime();
+                    path.textContent = data.thumbnail_path;
+                    resultDiv.style.display = 'block';
+                    
+                    showAlert('Test thumbnail generated successfully!', 'success');
+                } else {
+                    showAlert('Error: ' + data.error, 'error');
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');

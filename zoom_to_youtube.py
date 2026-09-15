@@ -137,6 +137,119 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     return output_path
 
 
+def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
+                                template_path='graphics_template.jpg',
+                                font_size=450):
+    """
+    Create thumbnail with custom font size for testing/debugging.
+    
+    Args:
+        text: Text to overlay on the template
+        output_path: Path to save thumbnail
+        template_path: Path to template image
+        font_size: Custom font size (default 450)
+    
+    Returns:
+        Path to created thumbnail
+    """
+    if not os.path.exists(template_path):
+        print(f"⚠ Warning: Template not found: {template_path}")
+        print("Creating thumbnail without template...")
+        # Fallback to simple thumbnail
+        img = Image.new('RGB', (1280, 720), color=(45, 55, 72))
+    else:
+        # Load template image
+        img = Image.open(template_path)
+        # Resize to YouTube standard if needed
+        if img.size != (1280, 720):
+            img = img.resize((1280, 720), Image.Resampling.LANCZOS)
+
+    draw = ImageDraw.Draw(img)
+
+    # Try to use a font that supports Hebrew
+    try:
+        # Try David Libre and other Hebrew-supporting fonts (in order of preference)
+        font_paths = [
+            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (preferred)
+            '/Library/Fonts/DavidLibre.ttf',
+            '/Library/Fonts/David Libre.ttf',
+            '/System/Library/Fonts/Supplemental/DavidLibre-Regular.ttf',
+            '~/Library/Fonts/DavidLibre-Regular.ttf',
+            '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',  # Fallback
+            '/Library/Fonts/Arial Unicode.ttf',
+        ]
+        
+        # Expand home directory
+        font_paths = [os.path.expanduser(p) for p in font_paths]
+        
+        font = None
+        for font_path in font_paths:
+            if os.path.exists(font_path):
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    print(f"Using font: {os.path.basename(font_path)} at size {font_size}")
+                    break
+                except Exception as e:
+                    print(f"Tried {font_path}: {e}")
+                    continue
+        
+        if not font:
+            print("⚠ Warning: No Hebrew font found, text may not display correctly")
+            font = ImageFont.load_default()
+    except Exception as e:
+        print(f"Font loading error: {e}")
+        font = ImageFont.load_default()
+
+    # Get image dimensions
+    width, height = img.size
+
+    # Process RTL text (Hebrew/Arabic) if support is available
+    display_text = text
+    if RTL_SUPPORT:
+        try:
+            # Reshape Arabic/Hebrew text and apply BiDi algorithm
+            reshaped_text = arabic_reshaper.reshape(text)
+            display_text = get_display(reshaped_text)
+            print(f"✓ Applied RTL text processing")
+        except Exception as e:
+            print(f"⚠ RTL processing failed: {e}, using original text")
+            display_text = text
+    else:
+        print("⚠ Using text without RTL processing (install python-bidi for Hebrew support)")
+
+    # Draw text in center of the black rectangle
+    # The black rectangle spans horizontally across the middle of the image
+    # For 1280x720 image:
+    black_rect_top = 420
+    black_rect_bottom = 655
+    black_rect_height = black_rect_bottom - black_rect_top
+    
+    # Calculate text size
+    bbox = draw.textbbox((0, 0), display_text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    
+    # Center horizontally on the entire image
+    x = (width - text_width) // 2
+    
+    # Position text so its center is at y=420
+    text_center_y = 420
+    y = text_center_y - (text_height // 2)
+    
+    # Draw the text (white color)
+    draw.text((x, y), display_text, font=font, fill=(255, 255, 255))
+    
+    print(f"Text positioned at: x={x}, y={y}")
+    print(f"Text size: {text_width}x{text_height}")
+    print(f"Font size used: {font_size}")
+    
+    # Save thumbnail
+    img.save(output_path, 'JPEG', quality=95)
+    print(f"✓ Thumbnail created: {output_path}")
+
+    return output_path
+
+
 def main():
     """Main workflow: Download from Zoom and upload to YouTube"""
 
