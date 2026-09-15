@@ -15,6 +15,7 @@ from werkzeug.utils import secure_filename
 from zoom_downloader import ZoomRecordingDownloader
 from youtube_uploader import YouTubeUploader
 from zoom_to_youtube import create_thumbnail
+from version import get_full_version, VERSION
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
@@ -42,7 +43,7 @@ def allowed_file(filename):
 @app.route('/')
 def index():
     """Main dashboard"""
-    return render_template('index.html')
+    return render_template('index.html', version=get_full_version())
 
 
 @app.route('/api/recordings', methods=['GET'])
