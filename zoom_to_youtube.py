@@ -46,7 +46,7 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     draw = ImageDraw.Draw(img)
 
     # Try to use a font that supports Hebrew
-    font_size = 450  # Font size for thumbnail text - large and bold
+    font_size = 200  # Font size for thumbnail text
     try:
         # Try David Libre and other Hebrew-supporting fonts (in order of preference)
         font_paths = [
@@ -117,17 +117,8 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     text_center_y = 420
     y = text_center_y - (text_height // 2)
 
-    # Draw text with outline for better visibility
-    outline_color = 'black'
-    text_color = 'black'
-    outline_width = 3
-
-    # Draw outline
-    for adj_x in range(-outline_width, outline_width + 1):
-        for adj_y in range(-outline_width, outline_width + 1):
-            draw.text((x + adj_x, y + adj_y), display_text, font=font, fill=outline_color)
-
-    # Draw main text
+    # Draw text in black
+    text_color = (0, 0, 0)  # Black
     draw.text((x, y), display_text, fill=text_color, font=font)
 
     # Save thumbnail
@@ -236,8 +227,8 @@ def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
     text_center_y = 420
     y = text_center_y - (text_height // 2)
     
-    # Draw the text (white color)
-    draw.text((x, y), display_text, font=font, fill=(255, 255, 255))
+    # Draw the text (black color)
+    draw.text((x, y), display_text, font=font, fill=(0, 0, 0))
     
     print(f"Text positioned at: x={x}, y={y}")
     print(f"Text size: {text_width}x{text_height}")

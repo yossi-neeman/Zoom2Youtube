@@ -352,7 +352,7 @@ def debug_thumbnail():
     try:
         data = request.json
         text = data.get('text', '')
-        font_size = data.get('font_size', 450)
+        font_size = data.get('font_size', 200)
         
         if not text:
             return jsonify({'success': False, 'error': 'Text required'}), 400
