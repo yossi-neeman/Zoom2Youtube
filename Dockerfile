@@ -33,7 +33,7 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
+# Copy application files v1.2.2
 COPY zoom_downloader.py .
 COPY youtube_uploader.py .
 COPY zoom_to_youtube.py .
