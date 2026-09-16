@@ -38,6 +38,7 @@ COPY zoom_downloader.py .
 COPY youtube_uploader.py .
 COPY zoom_to_youtube.py .
 COPY web_app.py .
+COPY version.py .
 COPY graphics_template.jpg .
 
 # Copy web app directories
