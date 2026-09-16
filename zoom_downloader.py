@@ -120,6 +120,9 @@ class ZoomRecordingDownloader:
         # Get filename from URL if not provided
         if not filename:
             filename = download_url.split('/')[-1].split('?')[0]
+            # Ensure .mp4 extension if not present
+            if not filename.lower().endswith('.mp4'):
+                filename = filename + '.mp4'
 
         filepath = os.path.join(output_path, filename)
 

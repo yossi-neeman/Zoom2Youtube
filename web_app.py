@@ -276,6 +276,14 @@ def upload_to_youtube():
                 'error': 'YouTube credentials not found'
             }), 500
         
+        # Check if video file exists before upload
+        if not os.path.exists(video_file):
+            return jsonify({
+                'success': False,
+                'error': f'Video file not found: {video_file}. Please download the recording again.'
+            }), 404
+        
+        print(f"Uploading video file: {video_file}")
         youtube_uploader = YouTubeUploader(client_secrets_file=client_secrets_path)
         video_id = youtube_uploader.upload_video(
             video_file=video_file,
