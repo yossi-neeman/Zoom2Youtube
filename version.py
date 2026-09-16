@@ -4,6 +4,7 @@ Application version information
 
 VERSION = "1.2.2"
 BUILD_DATE = "2026-09-16"
+# Force Docker cache bust
 
 def get_version():
     """Get the current application version"""
