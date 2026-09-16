@@ -48,7 +48,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
