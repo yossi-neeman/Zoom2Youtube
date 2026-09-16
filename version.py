@@ -2,7 +2,7 @@
 Application version information
 """
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 BUILD_DATE = "2026-09-16"
 
 def get_version():

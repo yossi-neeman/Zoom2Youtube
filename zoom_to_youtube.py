@@ -50,7 +50,8 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     try:
         # Try David Libre and other Hebrew-supporting fonts (in order of preference)
         font_paths = [
-            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (preferred)
+            '/usr/share/fonts/truetype/david-libre/DavidLibre-Regular.ttf',  # Docker
+            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (macOS)
             '/Library/Fonts/DavidLibre.ttf',
             '/Library/Fonts/David Libre.ttf',
             '/System/Library/Fonts/Supplemental/DavidLibre-Regular.ttf',
@@ -130,7 +131,7 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
 
 def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
                                 template_path='graphics_template.jpg',
-                                font_size=450):
+                                font_size=200):
     """
     Create thumbnail with custom font size for testing/debugging.
     
@@ -138,7 +139,7 @@ def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
         text: Text to overlay on the template
         output_path: Path to save thumbnail
         template_path: Path to template image
-        font_size: Custom font size (default 450)
+        font_size: Custom font size (default 200)
     
     Returns:
         Path to created thumbnail
@@ -161,7 +162,8 @@ def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
     try:
         # Try David Libre and other Hebrew-supporting fonts (in order of preference)
         font_paths = [
-            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (preferred)
+            '/usr/share/fonts/truetype/david-libre/DavidLibre-Regular.ttf',  # Docker
+            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (macOS)
             '/Library/Fonts/DavidLibre.ttf',
             '/Library/Fonts/David Libre.ttf',
             '/System/Library/Fonts/Supplemental/DavidLibre-Regular.ttf',
