@@ -260,6 +260,42 @@
             display: block;
         }
 
+        .user-menu {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-info {
+            color: white;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-logout {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-logout:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2rem;
@@ -277,10 +313,21 @@
                 flex: 1;
                 min-width: 120px;
             }
+
+            .user-menu {
+                position: static;
+                justify-content: center;
+                margin-bottom: 20px;
+            }
         }
     </style>
 </head>
 <body>
+    <div class="user-menu">
+        <span class="user-info">👤 {{ username }}</span>
+        <a href="/logout" class="btn-logout">🚪 Logout</a>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>📹 Zoom to YouTube <span style="font-size: 0.5em; color: #888; font-weight: normal;">{{ version }}</span></h1>

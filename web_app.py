@@ -9,7 +9,7 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, flash
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -19,7 +19,8 @@ from zoom_to_youtube import create_thumbnail
 from version import get_full_version, VERSION
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 CORS(app)
 
 # Authentication configuration
@@ -28,32 +29,19 @@ AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', 'changeme')
 AUTH_ENABLED = os.environ.get('AUTH_ENABLED', 'true').lower() == 'true'
 
 
-def check_auth(username, password):
-    """Check if username/password combination is valid"""
-    return username == AUTH_USERNAME and password == AUTH_PASSWORD
-
-
-def authenticate():
-    """Send 401 response that enables basic auth"""
-    return Response(
-        'Access denied. Please provide valid credentials.\n',
-        401,
-        {'WWW-Authenticate': 'Basic realm="Zoom2Youtube"'}
-    )
-
-
-def requires_auth(f):
-    """Decorator to require authentication"""
+def login_required(f):
+    """Decorator to require login"""
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def decorated_function(*args, **kwargs):
         if not AUTH_ENABLED:
             return f(*args, **kwargs)
         
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
+        if 'logged_in' not in session or not session['logged_in']:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': 'Authentication required'}), 401
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
-    return decorated
+    return decorated_function
 
 # Configuration
 UPLOAD_FOLDER = 'recordings'
@@ -74,15 +62,49 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page"""
+    if not AUTH_ENABLED:
+        session['logged_in'] = True
+        return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+            session['logged_in'] = True
+            session['username'] = username
+            session.permanent = True
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error='Invalid username or password', version=get_full_version())
+    
+    # If already logged in, redirect to index
+    if session.get('logged_in'):
+        return redirect(url_for('index'))
+    
+    return render_template('login.html', version=get_full_version())
+
+
+@app.route('/logout')
+def logout():
+    """Logout"""
+    session.clear()
+    return redirect(url_for('login'))
+
+
 @app.route('/')
-@requires_auth
+@login_required
 def index():
     """Main dashboard"""
-    return render_template('index.html', version=get_full_version())
+    username = session.get('username', 'User')
+    return render_template('index.html', version=get_full_version(), username=username)
 
 
 @app.route('/api/recordings', methods=['GET'])
-@requires_auth
+@login_required
 def get_recordings():
     """Get available Zoom recordings"""
     try:
@@ -139,7 +161,7 @@ def get_recordings():
 
 
 @app.route('/api/download', methods=['POST'])
-@requires_auth
+@login_required
 def download_recording():
     """Download a specific Zoom recording"""
     try:
@@ -250,7 +272,7 @@ def download_recording():
 
 
 @app.route('/api/playlists', methods=['GET'])
-@requires_auth
+@login_required
 def get_playlists():
     """Get YouTube playlists"""
     try:
@@ -278,7 +300,7 @@ def get_playlists():
 
 
 @app.route('/api/upload', methods=['POST'])
-@requires_auth
+@login_required
 def upload_to_youtube():
     """Upload video to YouTube"""
     try:
@@ -369,7 +391,7 @@ def upload_to_youtube():
 
 
 @app.route('/api/thumbnail/preview', methods=['POST'])
-@requires_auth
+@login_required
 def preview_thumbnail():
     """Generate thumbnail preview"""
     try:
@@ -396,7 +418,7 @@ def preview_thumbnail():
 
 
 @app.route('/api/debug/thumbnail', methods=['POST'])
-@requires_auth
+@login_required
 def debug_thumbnail():
     """Generate test thumbnail for debugging"""
     try:
@@ -429,7 +451,7 @@ def debug_thumbnail():
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
-@requires_auth
+@login_required
 def config():
     """Get or update configuration"""
     config_file = os.path.join(CREDENTIALS_FOLDER, 'web_config.json')
