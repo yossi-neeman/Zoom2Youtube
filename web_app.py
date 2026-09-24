@@ -8,7 +8,8 @@ import json
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -20,6 +21,39 @@ from version import get_full_version, VERSION
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 CORS(app)
+
+# Authentication configuration
+AUTH_USERNAME = os.environ.get('AUTH_USERNAME', 'admin')
+AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', 'changeme')
+AUTH_ENABLED = os.environ.get('AUTH_ENABLED', 'true').lower() == 'true'
+
+
+def check_auth(username, password):
+    """Check if username/password combination is valid"""
+    return username == AUTH_USERNAME and password == AUTH_PASSWORD
+
+
+def authenticate():
+    """Send 401 response that enables basic auth"""
+    return Response(
+        'Access denied. Please provide valid credentials.\n',
+        401,
+        {'WWW-Authenticate': 'Basic realm="Zoom2Youtube"'}
+    )
+
+
+def requires_auth(f):
+    """Decorator to require authentication"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not AUTH_ENABLED:
+            return f(*args, **kwargs)
+        
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 # Configuration
 UPLOAD_FOLDER = 'recordings'
@@ -41,12 +75,14 @@ def allowed_file(filename):
 
 
 @app.route('/')
+@requires_auth
 def index():
     """Main dashboard"""
     return render_template('index.html', version=get_full_version())
 
 
 @app.route('/api/recordings', methods=['GET'])
+@requires_auth
 def get_recordings():
     """Get available Zoom recordings"""
     try:
@@ -103,6 +139,7 @@ def get_recordings():
 
 
 @app.route('/api/download', methods=['POST'])
+@requires_auth
 def download_recording():
     """Download a specific Zoom recording"""
     try:
@@ -213,6 +250,7 @@ def download_recording():
 
 
 @app.route('/api/playlists', methods=['GET'])
+@requires_auth
 def get_playlists():
     """Get YouTube playlists"""
     try:
@@ -240,6 +278,7 @@ def get_playlists():
 
 
 @app.route('/api/upload', methods=['POST'])
+@requires_auth
 def upload_to_youtube():
     """Upload video to YouTube"""
     try:
@@ -330,6 +369,7 @@ def upload_to_youtube():
 
 
 @app.route('/api/thumbnail/preview', methods=['POST'])
+@requires_auth
 def preview_thumbnail():
     """Generate thumbnail preview"""
     try:
@@ -356,6 +396,7 @@ def preview_thumbnail():
 
 
 @app.route('/api/debug/thumbnail', methods=['POST'])
+@requires_auth
 def debug_thumbnail():
     """Generate test thumbnail for debugging"""
     try:
@@ -388,6 +429,7 @@ def debug_thumbnail():
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
+@requires_auth
 def config():
     """Get or update configuration"""
     config_file = os.path.join(CREDENTIALS_FOLDER, 'web_config.json')

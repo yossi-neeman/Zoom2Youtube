@@ -32,6 +32,12 @@ credentials/
 .env
 client_secrets.json
 
+# SSH keys
+*.pem
+*.key
+!*.pub
+yossineemanw-fra
+
 # IDE
 .vscode/
 .idea/
