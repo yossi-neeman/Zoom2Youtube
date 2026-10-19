@@ -48,10 +48,11 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     # Try to use a font that supports Hebrew
     font_size = 200  # Font size for thumbnail text
     try:
-        # Try David Libre and other Hebrew-supporting fonts (in order of preference)
+        # Try fonts in order of preference
         font_paths = [
             '/usr/share/fonts/truetype/david-libre/DavidLibre-Regular.ttf',  # Docker
-            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (macOS)
+            '/var/task/fonts/NotoSansHebrew-Regular.ttf',  # Docker fallback
+            '/Library/Fonts/DavidLibre-Regular.ttf',  # macOS
             '/Library/Fonts/DavidLibre.ttf',
             '/Library/Fonts/David Libre.ttf',
             '/System/Library/Fonts/Supplemental/DavidLibre-Regular.ttf',
@@ -76,11 +77,11 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
                     continue
         
         if not font:
-            print("⚠ Warning: No Hebrew font found, text may not display correctly")
-            font = ImageFont.load_default()
+            print("⚠ WARNING: Cannot load Hebrew font - thumbnail will be created without text")
     except Exception as e:
-        print(f"Font loading error: {e}")
-        font = ImageFont.load_default()
+        print(f"❌ Font loading error: {e}")
+        print(f"⚠ WARNING: Cannot load Hebrew font - thumbnail will be created without text")
+        font = None  # Don't use default bitmap font - it doesn't support Hebrew
 
     # Get image dimensions
     width, height = img.size
@@ -106,21 +107,49 @@ def create_thumbnail(text, output_path='thumbnail.jpg',
     black_rect_bottom = 655
     black_rect_height = black_rect_bottom - black_rect_top
     
-    # Calculate text size
-    bbox = draw.textbbox((0, 0), display_text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    
-    # Center horizontally on the entire image
-    x = (width - text_width) // 2
-    
-    # Position text so its center is at y=420
-    text_center_y = 420
-    y = text_center_y - (text_height // 2)
-
-    # Draw text in black
-    text_color = (0, 0, 0)  # Black
-    draw.text((x, y), display_text, fill=text_color, font=font)
+    # Only render text if we have a valid font
+    if font is None:
+        print("❌ Cannot render text: No Hebrew-capable font available")
+        print("⚠ Thumbnail will be created with template only (no text overlay)")
+    else:
+        # Calculate text size and draw text
+        try:
+            bbox = draw.textbbox((0, 0), display_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # Center horizontally on the entire image
+            x = (width - text_width) // 2
+            
+            # Position text so its center is at y=420
+            text_center_y = 420
+            y = text_center_y - (text_height // 2)
+            
+            # Draw text in black
+            text_color = (0, 0, 0)  # Black
+            draw.text((x, y), display_text, fill=text_color, font=font)
+            print(f"✓ Thumbnail created with text: {text[:20]}...")
+        except UnicodeEncodeError as e:
+            # Default font can't handle Hebrew - try rendering without BiDi processing
+            print(f"⚠ Cannot render RTL-processed text: {e}")
+            print("⚠ Attempting fallback rendering...")
+            try:
+                # Try with original text (not RTL processed)
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                x = (width - text_width) // 2
+                text_center_y = 420
+                y = text_center_y - (text_height // 2)
+                draw.text((x, y), text, fill=(0, 0, 0), font=font)
+                print(f"✓ Rendered text without RTL processing")
+            except Exception as fallback_error:
+                print(f"❌ Failed to render text: {fallback_error}")
+                print(f"⚠ Thumbnail will be created without text overlay")
+                # Continue anyway - save template without text rather than crash
+        except Exception as text_error:
+            print(f"❌ Error rendering text: {text_error}")
+            print(f"⚠ Thumbnail will be created with template only (no text overlay)")
 
     # Save thumbnail
     img.save(output_path, 'JPEG', quality=95)
@@ -160,10 +189,11 @@ def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
 
     # Try to use a font that supports Hebrew
     try:
-        # Try David Libre and other Hebrew-supporting fonts (in order of preference)
+        # Try fonts in order of preference
         font_paths = [
             '/usr/share/fonts/truetype/david-libre/DavidLibre-Regular.ttf',  # Docker
-            '/Library/Fonts/DavidLibre-Regular.ttf',  # David Libre (macOS)
+            '/var/task/fonts/NotoSansHebrew-Regular.ttf',  # Docker fallback
+            '/Library/Fonts/DavidLibre-Regular.ttf',  # macOS
             '/Library/Fonts/DavidLibre.ttf',
             '/Library/Fonts/David Libre.ttf',
             '/System/Library/Fonts/Supplemental/DavidLibre-Regular.ttf',
@@ -187,11 +217,11 @@ def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
                     continue
         
         if not font:
-            print("⚠ Warning: No Hebrew font found, text may not display correctly")
-            font = ImageFont.load_default()
+            print("⚠ WARNING: Cannot load Hebrew font - thumbnail will be created without text")
     except Exception as e:
-        print(f"Font loading error: {e}")
-        font = ImageFont.load_default()
+        print(f"❌ Font loading error: {e}")
+        print(f"⚠ WARNING: Cannot load Hebrew font - thumbnail will be created without text")
+        font = None  # Don't use default bitmap font - it doesn't support Hebrew
 
     # Get image dimensions
     width, height = img.size
@@ -217,28 +247,37 @@ def create_thumbnail_with_size(text, output_path='thumbnail.jpg',
     black_rect_bottom = 655
     black_rect_height = black_rect_bottom - black_rect_top
     
-    # Calculate text size
-    bbox = draw.textbbox((0, 0), display_text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    
-    # Center horizontally on the entire image
-    x = (width - text_width) // 2
-    
-    # Position text so its center is at y=420
-    text_center_y = 420
-    y = text_center_y - (text_height // 2)
-    
-    # Draw the text (black color)
-    draw.text((x, y), display_text, font=font, fill=(0, 0, 0))
-    
-    print(f"Text positioned at: x={x}, y={y}")
-    print(f"Text size: {text_width}x{text_height}")
-    print(f"Font size used: {font_size}")
+    # Only render text if we have a valid font
+    if font is None:
+        print("❌ Cannot render text: No Hebrew-capable font available")
+        print("⚠ Thumbnail will be created with template only (no text overlay)")
+    else:
+        try:
+            # Calculate text size
+            bbox = draw.textbbox((0, 0), display_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # Center horizontally on the entire image
+            x = (width - text_width) // 2
+            
+            # Position text so its center is at y=420
+            text_center_y = 420
+            y = text_center_y - (text_height // 2)
+            
+            # Draw the text (black color)
+            draw.text((x, y), display_text, font=font, fill=(0, 0, 0))
+            
+            print(f"✓ Text positioned at: x={x}, y={y}")
+            print(f"✓ Text size: {text_width}x{text_height}")
+            print(f"✓ Font size used: {font_size}")
+        except Exception as text_error:
+            print(f"❌ Error rendering text: {text_error}")
+            print(f"⚠ Thumbnail will be created with template only (no text overlay)")
     
     # Save thumbnail
     img.save(output_path, 'JPEG', quality=95)
-    print(f"✓ Thumbnail created: {output_path}")
+    print(f"✓ Thumbnail saved: {output_path}")
 
     return output_path
 

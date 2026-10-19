@@ -484,7 +484,7 @@
 
                     <div class="form-group">
                         <label>Playlist (Optional)</label>
-                        <select id="videoPlaylist">
+                        <select id="videoPlaylist" onchange="savePlaylistSelection()">
                             <option value="">No playlist</option>
                         </select>
                     </div>
@@ -497,8 +497,9 @@
                     <button type="submit" class="btn" id="uploadBtn">Upload to YouTube</button>
 
                     <div id="uploadProgress" style="display:none;">
-                        <div class="progress">
-                            <div class="progress-bar" id="progressBar">0%</div>
+                        <div id="progressText" style="margin-top:20px; text-align:center; font-weight:600; color:#555;">Uploading to YouTube</div>
+                        <div class="progress" style="margin-top:8px;">
+                            <div class="progress-bar" id="progressBar"></div>
                         </div>
                     </div>
                     
@@ -742,6 +743,14 @@
             }
         }
 
+        // Save playlist selection to localStorage
+        function savePlaylistSelection() {
+            const playlistId = document.getElementById('videoPlaylist').value;
+            if (playlistId) {
+                localStorage.setItem('lastPlaylistId', playlistId);
+            }
+        }
+
         // Load playlists
         async function loadPlaylists() {
             try {
@@ -753,10 +762,19 @@
                     select.innerHTML = '<option value="">No playlist</option>' +
                         data.playlists.map(pl => `<option value="${pl.id}">${pl.title} (${pl.item_count} videos)</option>`).join('');
                     
-                    // Auto-select playlist with "חולין" in the title
-                    const chulinPlaylist = data.playlists.find(pl => pl.title.includes('חולין'));
-                    if (chulinPlaylist) {
-                        select.value = chulinPlaylist.id;
+                    // Load saved playlist selection
+                    const savedPlaylistId = localStorage.getItem('lastPlaylistId');
+                    
+                    if (savedPlaylistId) {
+                        // If there's a saved selection, use it
+                        select.value = savedPlaylistId;
+                    } else {
+                        // Otherwise, auto-select playlist with "חולין" in the title (first time only)
+                        const chulinPlaylist = data.playlists.find(pl => pl.title.includes('חולין'));
+                        if (chulinPlaylist) {
+                            select.value = chulinPlaylist.id;
+                            localStorage.setItem('lastPlaylistId', chulinPlaylist.id);
+                        }
                     }
                 }
             } catch (error) {
@@ -792,7 +810,8 @@
             uploadBtn.textContent = 'Uploading...';
             progressDiv.style.display = 'block';
             progressBar.style.width = '10%';
-            progressBar.textContent = 'Uploading to YouTube';
+            const progressText = document.getElementById('progressText');
+            progressText.textContent = 'Uploading to YouTube';
             progressBar.classList.add('active');
             
             // Animate progress bar while uploading
@@ -801,7 +820,7 @@
             const uploadInterval = setInterval(() => {
                 dots = (dots + 1) % 4;
                 const dotString = '.'.repeat(dots);
-                progressBar.textContent = 'Uploading to YouTube' + dotString;
+                progressText.textContent = 'Uploading to YouTube' + dotString;
                 
                 // Gradually increase progress to 90% (never reach 100 until done)
                 if (progress < 90) {
@@ -824,7 +843,7 @@
                 progressBar.classList.remove('active');
 
                 progressBar.style.width = '100%';
-                progressBar.textContent = 'Complete!';
+                progressText.textContent = 'Complete!';
 
                 // Hide progress bar
                 setTimeout(() => {
@@ -839,7 +858,7 @@
                     successMsg.innerHTML = `Video has been uploaded and deleted from storage.<br><br>` +
                                           `<div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">` +
                                           `<a href="${data.video_url}" target="_blank" style="color: #155724; font-weight: bold; text-decoration: underline;">View on YouTube</a>` +
-                                          `<button onclick="copyToClipboard('${data.video_url}')" class="btn" style="padding: 5px 15px; font-size: 0.9rem; background: #155724;">Copy URL</button>` +
+                                          `<button type="button" onclick="copyToClipboard('${data.video_url}')" class="btn" style="padding: 5px 15px; font-size: 0.9rem; background: #155724;">Copy URL</button>` +
                                           `</div>`;
                     successDiv.style.display = 'block';
                     
@@ -848,7 +867,12 @@
                     document.querySelectorAll('#uploadForm .form-group').forEach(el => el.style.display = 'none');
                     document.getElementById('downloadedRecordingInfo').style.display = 'none';
                 } else {
-                    showAlert('Error: ' + data.error, 'error');
+                    const detail = data.error || data.message || `HTTP ${response.status}`;
+                    const timedOut = [502, 503, 504].includes(response.status) ||
+                        /timed out|timeout/i.test(detail);
+                    showAlert(timedOut
+                        ? `Request timed out (${detail}). The upload may still have succeeded - check your YouTube Studio before retrying.`
+                        : 'Error: ' + detail, 'error');
                     uploadBtn.disabled = false;
                     uploadBtn.textContent = 'Upload to YouTube';
                 }
@@ -876,6 +900,10 @@
             selectedVideoFile = null;
             selectedRecording = null;
             selectedRecordingInfo = null;
+            
+            // Reload saved values (מסכת, דף, and playlist)
+            loadSavedValues();
+            loadPlaylists();
             
             // Go back to recordings tab
             switchTab('recordings');
@@ -956,13 +984,34 @@
                     const preview = document.getElementById('debugThumbnailPreview');
                     const path = document.getElementById('debugThumbnailPath');
                     
-                    preview.src = '/' + data.thumbnail_path + '?t=' + new Date().getTime();
-                    path.textContent = data.thumbnail_path;
+                    // Use base64 data directly
+                    preview.src = data.thumbnail_data;
+                    path.textContent = 'Thumbnail generated successfully';
                     resultDiv.style.display = 'block';
+                    
+                    // Display debug logs if available
+                    if (data.debug_logs) {
+                        console.log('Debug logs:', data.debug_logs);
+                        // You can also add a logs display area in the UI if needed
+                        const logsDiv = document.createElement('div');
+                        logsDiv.style.cssText = 'margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 8px; font-family: monospace; white-space: pre-wrap; font-size: 12px; max-height: 300px; overflow-y: auto;';
+                        logsDiv.textContent = data.debug_logs;
+                        
+                        // Remove old logs if exists
+                        const oldLogs = document.getElementById('debugLogs');
+                        if (oldLogs) oldLogs.remove();
+                        
+                        logsDiv.id = 'debugLogs';
+                        resultDiv.appendChild(logsDiv);
+                    }
                     
                     showAlert('Test thumbnail generated successfully!', 'success');
                 } else {
-                    showAlert('Error: ' + data.error, 'error');
+                    showAlert('Error: ' + (data.error || 'Unknown error'), 'error');
+                    // Show traceback if available
+                    if (data.traceback) {
+                        console.error('Traceback:', data.traceback);
+                    }
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');

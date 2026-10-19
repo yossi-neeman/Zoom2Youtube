@@ -1,0 +1,23 @@
+# Test dependencies
+# Install with: pip install -r requirements-test.txt
+
+# Testing framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+
+# Code coverage
+coverage>=7.3.0
+
+# Mocking and test utilities
+unittest-xml-reporting>=3.2.0
+responses>=0.23.3
+freezegun>=1.2.2  # For time-based testing
+
+# Linting and code quality
+flake8>=6.1.0
+pylint>=2.17.5
+black>=23.7.0
+
+# Type checking
+mypy>=1.5.0

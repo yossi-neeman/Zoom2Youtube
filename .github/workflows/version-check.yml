@@ -1,0 +1,27 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  version-bumped:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Require a new version in version.py
+      run: |
+        base=$(git show "origin/${{ github.base_ref }}:version.py" | sed -n 's/^VERSION = "\(.*\)"/\1/p')
+        head=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' version.py)
+        echo "base=$base head=$head"
+        if [ "$base" = "$head" ]; then
+          echo "::error file=version.py::VERSION is still $head. Bump VERSION and BUILD_DATE in version.py for every PR."
+          exit 1
+        fi
+        if [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; then
+          echo "::error file=version.py::VERSION $head is lower than base $base."
+          exit 1
+        fi
