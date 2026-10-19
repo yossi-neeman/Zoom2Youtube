@@ -18,7 +18,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Mock environment before importing app
 os.environ['USE_S3_STORAGE'] = 'false'
 os.environ['AUTH_ENABLED'] = 'false'
+os.environ.setdefault('ZOOM_ACCOUNT_ID', 'test-account')
+os.environ.setdefault('ZOOM_CLIENT_ID', 'test-client')
+os.environ.setdefault('ZOOM_CLIENT_SECRET', 'test-secret')
 
+import web_app
 from web_app import app
 
 
@@ -29,6 +33,8 @@ class TestWebAppEndpoints(unittest.TestCase):
         """Set up test client"""
         app.config['TESTING'] = True
         self.client = app.test_client()
+        web_app._upload_results.clear()
+        web_app._upload_inflight.clear()
 
     def test_index_loads(self):
         """Test that index page loads"""
@@ -37,7 +43,8 @@ class TestWebAppEndpoints(unittest.TestCase):
 
     def test_login_page_loads(self):
         """Test that login page loads"""
-        response = self.client.get('/login')
+        with patch('web_app.AUTH_ENABLED', True):
+            response = self.client.get('/login')
         self.assertEqual(response.status_code, 200)
 
     @patch('web_app.storage')
@@ -95,9 +102,11 @@ class TestWebAppEndpoints(unittest.TestCase):
         mock_downloader.download_recording.return_value = '/tmp/recordings/test.mp4'
         mock_downloader_class.return_value = mock_downloader
 
-        response = self.client.post('/api/download',
-                                   json={'recording_id': 'test-uuid'},
-                                   content_type='application/json')
+        with patch('boto3.client') as mock_boto:
+            mock_boto.return_value.list_objects_v2.return_value = {}
+            response = self.client.post('/api/download',
+                                       json={'recording_id': 'test-uuid'},
+                                       content_type='application/json')
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -156,7 +165,7 @@ class TestWebAppEndpoints(unittest.TestCase):
 
         # Mock the uploader
         mock_uploader = Mock()
-        mock_uploader.get_playlists.return_value = [
+        mock_uploader.list_playlists.return_value = [
             {
                 'id': 'PL123',
                 'title': 'Test Playlist'
@@ -186,6 +195,8 @@ class TestHebrewTextHandling(unittest.TestCase):
         """Set up test client"""
         app.config['TESTING'] = True
         self.client = app.test_client()
+        web_app._upload_results.clear()
+        web_app._upload_inflight.clear()
 
     @patch('web_app.create_thumbnail')
     @patch('web_app.storage')
@@ -196,7 +207,7 @@ class TestHebrewTextHandling(unittest.TestCase):
         mock_create_thumbnail.return_value = '/tmp/thumbnail.jpg'
 
         # This should not raise an encoding error
-        with patch('os.path.exists', return_value=True):
+        with patch('os.path.exists', return_value=True), patch('os.remove'):
             with patch('web_app.YouTubeUploader') as mock_uploader:
                 mock_uploader.return_value.upload_video.return_value = 'video_123'
 
@@ -242,6 +253,8 @@ class TestS3Integration(unittest.TestCase):
         """Set up test environment"""
         app.config['TESTING'] = True
         self.client = app.test_client()
+        web_app._upload_results.clear()
+        web_app._upload_inflight.clear()
 
     @patch('web_app.storage')
     @patch('web_app.ZoomRecordingDownloader')
@@ -266,9 +279,11 @@ class TestS3Integration(unittest.TestCase):
         mock_downloader.download_recording.return_value = '/tmp/recordings/test.mp4'
         mock_downloader_class.return_value = mock_downloader
 
-        response = self.client.post('/api/download',
-                                   json={'recording_id': 'test-uuid'},
-                                   content_type='application/json')
+        with patch('boto3.client') as mock_boto:
+            mock_boto.return_value.list_objects_v2.return_value = {}
+            response = self.client.post('/api/download',
+                                       json={'recording_id': 'test-uuid'},
+                                       content_type='application/json')
 
         self.assertEqual(response.status_code, 200)
         # Verify S3 save was called (persistence across Lambda invocations)
@@ -282,6 +297,7 @@ class TestS3Integration(unittest.TestCase):
         mock_storage.is_s3.return_value = True
         mock_storage.exists.return_value = True
         mock_storage.get_local_path.return_value = '/tmp/downloaded.mp4'
+        mock_storage.read_file.return_value = b'{}'
 
         # Mock uploader
         mock_uploader = Mock()
@@ -308,6 +324,8 @@ class TestErrorHandling(unittest.TestCase):
         """Set up test client"""
         app.config['TESTING'] = True
         self.client = app.test_client()
+        web_app._upload_results.clear()
+        web_app._upload_inflight.clear()
 
     def test_missing_recording_id(self):
         """Test download without recording_id"""
@@ -329,7 +347,8 @@ class TestErrorHandling(unittest.TestCase):
     def test_video_not_found_in_storage(self, mock_storage):
         """Test upload when video doesn't exist in storage"""
         mock_storage.is_s3.return_value = True
-        mock_storage.exists.return_value = False
+        mock_storage.read_file.return_value = b'{}'
+        mock_storage.exists.side_effect = lambda key: key.startswith('credentials/')
 
         response = self.client.post('/api/upload',
                                    json={
@@ -341,6 +360,26 @@ class TestErrorHandling(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         data = json.loads(response.data)
         self.assertIn('not found', data['error'].lower())
+
+    @patch('web_app.storage')
+    @patch('web_app.YouTubeUploader')
+    def test_repeated_upload_returns_original_result(self, mock_uploader_class, mock_storage):
+        """A duplicate request after success must not re-upload or 404 on the cleaned-up file"""
+        mock_storage.is_s3.return_value = False
+        mock_storage.exists.return_value = True
+        mock_storage.get_local_path.return_value = '/tmp/creds'
+        mock_uploader_class.return_value.upload_video.return_value = 'video_123'
+        payload = {'video_file': 'recordings/dup/test.mp4', 'title': 'Test'}
+
+        with patch('os.path.exists', return_value=True), patch('web_app.shutil.rmtree'):
+            first = self.client.post('/api/upload', json=payload)
+        # Recording is gone now (cleaned up after the first upload)
+        second = self.client.post('/api/upload', json=payload)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.get_json(), first.get_json())
+        mock_uploader_class.return_value.upload_video.assert_called_once()
 
 
 if __name__ == '__main__':
