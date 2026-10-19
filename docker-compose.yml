@@ -1,29 +1,47 @@
 version: '3.8'
 
 services:
-  web:
-    build: .
+  zoom2youtube:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     ports:
       - "5000:5000"
-    environment:
-      - PORT=5000
-      - FLASK_ENV=production
+    volumes:
+      # Mount code for live development
+      - ./web_app.py:/app/web_app.py
+      - ./zoom_downloader.py:/app/zoom_downloader.py
+      - ./youtube_uploader.py:/app/youtube_uploader.py
+      - ./zoom_to_youtube.py:/app/zoom_to_youtube.py
+      - ./storage.py:/app/storage.py
+      - ./version.py:/app/version.py
+      - ./templates:/app/templates
+      - ./static:/app/static
+      
+      # Mount persistent directories
+      - ./recordings:/app/recordings
+      - ./credentials:/app/credentials
     env_file:
       - credentials/.env
-    volumes:
-      - ./credentials:/app/credentials
-      - ./recordings:/app/recordings
-      - ./static:/app/static
+    environment:
+      # Force local storage for development
+      - USE_S3_STORAGE=false
+      - PYTHONUNBUFFERED=1
+      - PORT=5000
     command: python web_app.py
     restart: unless-stopped
 
-  cli:
-    build: .
-    env_file:
-      - credentials/.env
-    volumes:
-      - ./credentials:/app/credentials
-      - ./recordings:/app/recordings
-    command: python zoom_to_youtube.py
-    profiles:
-      - cli
+  # Optional: LocalStack for testing S3 locally
+  # localstack:
+  #   image: localstack/localstack:latest
+  #   ports:
+  #     - "4566:4566"
+  #   environment:
+  #     - SERVICES=s3
+  #     - DEBUG=1
+  #     - DATA_DIR=/tmp/localstack/data
+  #   volumes:
+  #     - localstack-data:/tmp/localstack
+
+# volumes:
+#   localstack-data:
