@@ -21,15 +21,14 @@ Your application has been successfully converted to support **both local develop
 
 ### Docker Files
 
-3. **`Dockerfile`** - Production Lambda build
+3. **`Dockerfile`** - Default build (regular Docker image)
+   - Standard Python slim image running `web_app.py`
+   - Used by docker-compose, local testing and the Docker Hub publish workflow
+
+4. **`Dockerfile.lambda`** - AWS Lambda build
    - Based on AWS Lambda Python 3.11 base image
    - Includes all Hebrew font support
-   - Optimized for Lambda execution
-
-4. **`Dockerfile.local`** - Local development build
-   - Standard Python slim image
-   - Matches your original Dockerfile
-   - For docker-compose and local testing
+   - Built explicitly with `-f Dockerfile.lambda` by the Lambda deploy scripts
 
 5. **`docker-compose.yml`** - Local development environment
    - Volume mounts for hot reload

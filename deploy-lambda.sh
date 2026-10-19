@@ -106,7 +106,7 @@ fi
 # Step 4: Build and push Docker image
 echo ""
 echo -e "${YELLOW}Step 4:${NC} Building Docker image..."
-docker build -t $ECR_REPO_NAME:lambda .
+docker build -f Dockerfile.lambda -t $ECR_REPO_NAME:lambda .
 echo -e "${GREEN}✓${NC} Docker image built"
 
 echo ""
