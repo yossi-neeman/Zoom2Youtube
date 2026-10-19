@@ -6,17 +6,19 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      # Localhost only by default (put a tunnel / reverse proxy in front of it).
+      # Set BIND_ADDR=0.0.0.0 to expose it on your LAN.
+      - "${BIND_ADDR:-127.0.0.1}:5000:5000"
     volumes:
       # Mount code for live development
-      - ./web_app.py:/app/web_app.py
-      - ./zoom_downloader.py:/app/zoom_downloader.py
-      - ./youtube_uploader.py:/app/youtube_uploader.py
-      - ./zoom_to_youtube.py:/app/zoom_to_youtube.py
-      - ./storage.py:/app/storage.py
-      - ./version.py:/app/version.py
-      - ./templates:/app/templates
-      - ./static:/app/static
+      - ./web_app.py:/app/web_app.py:ro
+      - ./zoom_downloader.py:/app/zoom_downloader.py:ro
+      - ./youtube_uploader.py:/app/youtube_uploader.py:ro
+      - ./zoom_to_youtube.py:/app/zoom_to_youtube.py:ro
+      - ./storage.py:/app/storage.py:ro
+      - ./version.py:/app/version.py:ro
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
       
       # Mount persistent directories
       - ./recordings:/app/recordings
@@ -28,7 +30,17 @@ services:
       - USE_S3_STORAGE=false
       - PYTHONUNBUFFERED=1
       - PORT=5000
-    command: python web_app.py
+      - HOME=/tmp
+      # Set SECRET_KEY in credentials/.env (e.g. `openssl rand -hex 32`) so sessions survive restarts
+      # Set SESSION_COOKIE_SECURE=true and TRUST_PROXY=true when served over HTTPS via a tunnel/proxy
+    # Container hardening
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   # Optional: LocalStack for testing S3 locally

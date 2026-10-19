@@ -382,5 +382,66 @@ class TestErrorHandling(unittest.TestCase):
         mock_uploader_class.return_value.upload_video.assert_called_once()
 
 
+class TestSecurityHardening(unittest.TestCase):
+    """Login rate limiting, cookie flags, CORS and debug endpoint gating"""
+
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.client = app.test_client()
+        web_app._login_failures.clear()
+        patcher = patch.multiple('web_app', AUTH_ENABLED=True,
+                                 AUTH_USERNAME='admin', AUTH_PASSWORD='s3cret-pass')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _login(self, password, username='admin'):
+        return self.client.post('/login', data={'username': username, 'password': password})
+
+    def test_correct_login_succeeds(self):
+        response = self._login('s3cret-pass')
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as sess:
+            self.assertTrue(sess.get('logged_in'))
+
+    def test_wrong_password_rejected(self):
+        response = self._login('wrong')
+        self.assertEqual(response.status_code, 200)
+        with self.client.session_transaction() as sess:
+            self.assertFalse(sess.get('logged_in'))
+
+    def test_login_locks_out_after_repeated_failures(self):
+        for _ in range(web_app.LOGIN_MAX_FAILURES):
+            self.assertEqual(self._login('wrong').status_code, 200)
+        locked = self._login('wrong')
+        self.assertEqual(locked.status_code, 429)
+        self.assertIn('Retry-After', locked.headers)
+        # Even the correct password is refused while locked out
+        self.assertEqual(self._login('s3cret-pass').status_code, 429)
+
+    def test_successful_login_resets_failure_count(self):
+        for _ in range(web_app.LOGIN_MAX_FAILURES - 1):
+            self._login('wrong')
+        self.assertEqual(self._login('s3cret-pass').status_code, 302)
+        self.assertEqual(len(web_app._login_failures), 0)
+
+    def test_session_cookie_flags(self):
+        self.assertTrue(app.config['SESSION_COOKIE_HTTPONLY'])
+        self.assertEqual(app.config['SESSION_COOKIE_SAMESITE'], 'Lax')
+
+    def test_cors_disabled_by_default(self):
+        response = self.client.get('/login', headers={'Origin': 'https://evil.example'})
+        self.assertNotIn('Access-Control-Allow-Origin', response.headers)
+
+    def test_debug_endpoint_disabled_by_default(self):
+        with self.client.session_transaction() as sess:
+            sess['logged_in'] = True
+        response = self.client.post('/api/debug/thumbnail', json={'text': 'x'})
+        self.assertEqual(response.status_code, 404)
+
+    def test_api_requires_login(self):
+        response = self.client.get('/api/recordings')
+        self.assertEqual(response.status_code, 401)
+
+
 if __name__ == '__main__':
     unittest.main()
