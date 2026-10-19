@@ -21,7 +21,7 @@ echo ""
 
 # Build image
 echo "📦 Building Docker image..."
-docker build -t $ECR_REPO_NAME:lambda .
+docker build -f Dockerfile.lambda -t $ECR_REPO_NAME:lambda .
 
 # Login to ECR
 echo "🔐 Logging into ECR..."

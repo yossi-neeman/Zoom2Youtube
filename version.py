@@ -2,9 +2,9 @@
 Application version information
 """
 
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 BUILD_DATE = "2026-10-19"
-# Fixed: duplicate /api/upload no longer fails with "Video file not found" after a successful upload
+# Changed: default Dockerfile is now the regular web-app image; Lambda image moved to Dockerfile.lambda
 
 def get_version():
     """Get the current application version"""

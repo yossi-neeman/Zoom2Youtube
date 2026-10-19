@@ -6,8 +6,8 @@
 echo "🧪 Testing Docker image locally..."
 
 # Build the local image
-echo "Building Dockerfile.local..."
-docker build -f Dockerfile.local -t zoom2youtube:test .
+echo "Building Dockerfile..."
+docker build -f Dockerfile -t zoom2youtube:test .
 
 echo ""
 echo "✓ Build complete!"

@@ -107,10 +107,10 @@ docker-compose up
 ./test-local.sh
 
 # Build for Lambda
-docker build -t zoom2youtube:lambda .
+docker build -f Dockerfile.lambda -t zoom2youtube:lambda .
 
 # Build for local
-docker build -f Dockerfile.local -t zoom2youtube:local .
+docker build -t zoom2youtube:local .
 ```
 
 ## ☁️ Lambda Management

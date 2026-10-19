@@ -21,7 +21,7 @@ docker-compose up --build
 
 ```bash
 # Build
-docker build -f Dockerfile.local -t zoom2youtube:local .
+docker build -t zoom2youtube:local .
 
 # Run
 docker run -p 5000:5000 \
@@ -102,7 +102,7 @@ aws ecr get-login-password --region us-east-1 | \
 
 ```bash
 # Build for Lambda
-docker build -t zoom2youtube:lambda .
+docker build -f Dockerfile.lambda -t zoom2youtube:lambda .
 
 # Tag for ECR
 docker tag zoom2youtube:lambda \
@@ -227,7 +227,7 @@ PORT=5000             # Web server port
 
 ```bash
 # Rebuild image
-docker build -t zoom2youtube:lambda .
+docker build -f Dockerfile.lambda -t zoom2youtube:lambda .
 
 # Tag and push
 docker tag zoom2youtube:lambda \

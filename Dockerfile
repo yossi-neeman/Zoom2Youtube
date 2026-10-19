@@ -1,17 +1,22 @@
-FROM public.ecr.aws/lambda/python:3.11
+FROM python:3.11-slim
 
-# Install system dependencies including FreeType development files
-RUN yum install -y \
+# Install system dependencies and build tools
+RUN apt-get update && apt-get install -y \
+    fonts-dejavu-core \
+    fonts-liberation \
     fontconfig \
     wget \
     unzip \
     gcc \
-    gcc-c++ \
-    libjpeg-turbo-devel \
-    zlib-devel \
-    freetype-devel \
-    freetype \
-    && yum clean all
+    g++ \
+    libjpeg-dev \
+    zlib1g-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libopenjp2-7-dev \
+    libtiff-dev \
+    libwebp-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install David Libre Hebrew font
 RUN mkdir -p /usr/share/fonts/truetype/david-libre && \
@@ -19,47 +24,39 @@ RUN mkdir -p /usr/share/fonts/truetype/david-libre && \
     -O /usr/share/fonts/truetype/david-libre/DavidLibre-Regular.ttf && \
     fc-cache -f -v
 
-# Fallback Hebrew font
-RUN mkdir -p ${LAMBDA_TASK_ROOT}/fonts && \
-    cd ${LAMBDA_TASK_ROOT}/fonts && \
-    (wget -q -O NotoSansHebrew-Regular.ttf \
-    "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanshebrew/NotoSansHebrew%5Bwdth%2Cwght%5D.ttf" || \
-    wget -q -O NotoSansHebrew-Regular.ttf \
-    "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansHebrew/NotoSansHebrew-Regular.ttf" || \
-    echo "Font download failed, will use runtime download fallback") && \
-    ls -lh ${LAMBDA_TASK_ROOT}/fonts/ && \
-    echo "Font installation attempt complete"
+# Set working directory
+WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements.txt ${LAMBDA_TASK_ROOT}/
+COPY requirements.txt .
 
-# Install Python dependencies (with SSL certificate handling)
-# Pillow must come from a prebuilt wheel: a source build links the system FreeType 2.8,
-# which lacks FT_Set_Named_Instance and breaks ImageFont.truetype().
-RUN pip install --no-cache-dir --only-binary=Pillow --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r ${LAMBDA_TASK_ROOT}/requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY zoom_downloader.py ${LAMBDA_TASK_ROOT}/
-COPY youtube_uploader.py ${LAMBDA_TASK_ROOT}/
-COPY zoom_to_youtube.py ${LAMBDA_TASK_ROOT}/
-COPY storage.py ${LAMBDA_TASK_ROOT}/
-COPY web_app.py ${LAMBDA_TASK_ROOT}/
-COPY graphics_template.jpg ${LAMBDA_TASK_ROOT}/
-COPY version.py ${LAMBDA_TASK_ROOT}/
+COPY zoom_downloader.py .
+COPY youtube_uploader.py .
+COPY zoom_to_youtube.py .
+COPY storage.py .
+COPY web_app.py .
+COPY graphics_template.jpg .
 
 # Copy web app directories
-COPY templates/ ${LAMBDA_TASK_ROOT}/templates/
-COPY static/ ${LAMBDA_TASK_ROOT}/static/
+COPY templates/ ./templates/
+COPY static/ ./static/
 
-# Copy Lambda handler
-COPY lambda_handler.py ${LAMBDA_TASK_ROOT}/
+# Copy version.py last to avoid cache issues
+COPY version.py .
 
-# Create directories for temp storage
-RUN mkdir -p /tmp/recordings /tmp/credentials
+# Create directories for output and credentials
+RUN mkdir -p /app/recordings /app/credentials
 
-# Set environment variables
+# Set environment variables (can be overridden at runtime)
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5000
 
-# Lambda handler
-CMD ["lambda_handler.handler"]
+# Expose port for web app
+EXPOSE 5000
+
+# Default command (runs web app, can be overridden for CLI)
+CMD ["python", "web_app.py"]
