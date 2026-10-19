@@ -2,9 +2,9 @@
 Application version information
 """
 
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 BUILD_DATE = "2026-10-19"
-# Changed: default Dockerfile is now the regular web-app image; Lambda image moved to Dockerfile.lambda
+# Security: gunicorn instead of Flask debug server, login rate limiting, hardened cookies/CORS, non-root container
 
 def get_version():
     """Get the current application version"""

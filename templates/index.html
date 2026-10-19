@@ -339,7 +339,7 @@
                 <button class="tab active" onclick="switchTab('recordings', event)">📥 Recordings</button>
                 <button class="tab" onclick="switchTab('upload', event)">📤 Upload</button>
                 <button class="tab" onclick="switchTab('settings', event)">⚙️ Settings</button>
-                <button class="tab" onclick="switchTab('debug', event)">🔧 Debug</button>
+                {% if debug_enabled %}<button class="tab" onclick="switchTab('debug', event)">🔧 Debug</button>{% endif %}
             </div>
 
             <!-- Recordings Tab -->

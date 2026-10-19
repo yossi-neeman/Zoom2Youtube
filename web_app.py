@@ -7,10 +7,13 @@ import os
 import json
 import shutil
 import threading
+import hmac
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, flash
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, flash, make_response, abort
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -21,10 +24,32 @@ from version import get_full_version, VERSION
 from storage import get_storage
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+_secret_key = os.environ.get('SECRET_KEY')
+if not _secret_key:
+    print("Warning: SECRET_KEY is not set; using a random key (sessions reset on every restart)")
+    _secret_key = os.urandom(24).hex()
+app.secret_key = _secret_key
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 app.config['JSON_AS_ASCII'] = False  # Allow Unicode characters in JSON responses
-CORS(app)
+
+# Session cookie hardening. Set SESSION_COOKIE_SECURE=true when served over HTTPS.
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+
+# Behind a reverse proxy / tunnel (Cloudflare Tunnel, nginx, ...) trust one hop of
+# X-Forwarded-* so request.remote_addr is the real client (used by the login limiter).
+if os.environ.get('TRUST_PROXY', 'false').lower() == 'true':
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# The UI is served from the same origin, so CORS is off unless origins are listed explicitly.
+_cors_origins = [o.strip() for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()]
+if _cors_origins:
+    CORS(app, origins=_cors_origins)
+
+# Debug-only endpoints/UI (thumbnail tester) are disabled unless explicitly enabled.
+DEBUG_ENDPOINTS_ENABLED = os.environ.get('ENABLE_DEBUG_ENDPOINTS', 'false').lower() == 'true'
 
 # Middleware to ensure UTF-8 encoding
 @app.after_request
@@ -66,6 +91,42 @@ storage = get_storage()
 AUTH_USERNAME = os.environ.get('AUTH_USERNAME', 'admin')
 AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', 'changeme')
 AUTH_ENABLED = os.environ.get('AUTH_ENABLED', 'true').lower() == 'true'
+
+# Login brute-force protection: too many failures from one IP -> temporary lockout.
+# In-memory (per process); the container runs a single gunicorn worker.
+LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', 5))
+LOGIN_WINDOW_SECONDS = int(os.environ.get('LOGIN_WINDOW_SECONDS', 900))
+_login_failures = defaultdict(deque)
+_login_lock = threading.Lock()
+
+
+def _login_retry_after(ip):
+    """Seconds until `ip` may try again, or 0 if it is not locked out."""
+    now = time.monotonic()
+    with _login_lock:
+        failures = _login_failures[ip]
+        while failures and now - failures[0] > LOGIN_WINDOW_SECONDS:
+            failures.popleft()
+        if len(failures) >= LOGIN_MAX_FAILURES:
+            return int(LOGIN_WINDOW_SECONDS - (now - failures[0])) + 1
+        return 0
+
+
+def _record_login_failure(ip):
+    with _login_lock:
+        _login_failures[ip].append(time.monotonic())
+
+
+def _clear_login_failures(ip):
+    with _login_lock:
+        _login_failures.pop(ip, None)
+
+
+def _credentials_match(username, password):
+    """Constant-time credential comparison."""
+    user_ok = hmac.compare_digest((username or '').encode('utf-8'), AUTH_USERNAME.encode('utf-8'))
+    pass_ok = hmac.compare_digest((password or '').encode('utf-8'), AUTH_PASSWORD.encode('utf-8'))
+    return user_ok and pass_ok
 
 
 def login_required(f):
@@ -119,13 +180,26 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
-        if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+        ip = request.remote_addr or 'unknown'
+
+        retry_after = _login_retry_after(ip)
+        if retry_after:
+            response = make_response(render_template(
+                'login.html',
+                error=f'Too many failed attempts. Try again in {retry_after // 60 + 1} minutes.',
+                version=get_full_version()), 429)
+            response.headers['Retry-After'] = str(retry_after)
+            return response
+
+        if _credentials_match(username, password):
+            _clear_login_failures(ip)
+            session.clear()
             session['logged_in'] = True
             session['username'] = username
             session.permanent = True
             return redirect(url_for('index'))
         else:
+            _record_login_failure(ip)
             return render_template('login.html', error='Invalid username or password', version=get_full_version())
     
     # If already logged in, redirect to index
@@ -147,7 +221,8 @@ def logout():
 def index():
     """Main dashboard"""
     username = session.get('username', 'User')
-    return render_template('index.html', version=get_full_version(), username=username)
+    return render_template('index.html', version=get_full_version(), username=username,
+                           debug_enabled=DEBUG_ENDPOINTS_ENABLED)
 
 
 @app.route('/api/recordings', methods=['GET'])
@@ -664,6 +739,8 @@ def preview_thumbnail():
 @login_required
 def debug_thumbnail():
     """Generate test thumbnail for debugging"""
+    if not DEBUG_ENDPOINTS_ENABLED:
+        abort(404)
     import sys
     from io import StringIO
     import base64
@@ -760,5 +837,8 @@ if __name__ == '__main__':
         print(f"Warning: Missing environment variables: {', '.join(missing_vars)}")
         print("Please set them in .env file or environment")
     
+    # Development server only; the Docker image runs gunicorn. Debug mode (Werkzeug
+    # debugger = remote code execution) is opt-in via FLASK_DEBUG=true.
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(host=os.environ.get('HOST', '0.0.0.0'), port=port, debug=debug)

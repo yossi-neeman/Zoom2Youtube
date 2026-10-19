@@ -48,15 +48,22 @@ COPY static/ ./static/
 # Copy version.py last to avoid cache issues
 COPY version.py .
 
-# Create directories for output and credentials
-RUN mkdir -p /app/recordings /app/credentials
+# Create directories for output and credentials, and run as a non-root user
+# (uid 1000 matches the default user on a Raspberry Pi so bind-mounted dirs stay writable)
+RUN useradd --create-home --uid 1000 app && \
+    mkdir -p /app/recordings /app/credentials && \
+    chown -R app:app /app
+USER app
 
 # Set environment variables (can be overridden at runtime)
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PORT=5000
 
 # Expose port for web app
 EXPOSE 5000
 
-# Default command (runs web app, can be overridden for CLI)
-CMD ["python", "web_app.py"]
+# Production server: gunicorn, not the Flask dev server (no debugger).
+# A single worker is intentional: upload de-duplication and the login rate limiter
+# are in-memory. Threads handle concurrency; the long timeout allows large uploads.
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 3600 web_app:app"]
