@@ -443,5 +443,79 @@ class TestSecurityHardening(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+class TestGoogleAdminLogin(unittest.TestCase):
+    """Google sign-in for admins (allowlist, state, verified email)"""
+
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.client = app.test_client()
+        web_app._login_failures.clear()
+        patcher = patch.multiple(
+            'web_app', AUTH_ENABLED=True, AUTH_MODE='both',
+            GOOGLE_LOGIN_CLIENT_ID='cid', GOOGLE_LOGIN_CLIENT_SECRET='csecret',
+            GOOGLE_LOGIN_REDIRECT_URI='https://example.com/auth/callback',
+            ADMIN_EMAILS={'alice@gmail.com'}, ADMIN_DOMAINS={'corp.org'})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _start(self):
+        response = self.client.get('/auth/google')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('accounts.google.com', response.headers['Location'])
+        self.assertIn('code_challenge=', response.headers['Location'])
+        with self.client.session_transaction() as sess:
+            return sess['google_oauth_state']
+
+    def _callback(self, state, claims):
+        with patch('web_app._exchange_google_code', return_value=claims):
+            return self.client.get(f'/auth/callback?state={state}&code=abc')
+
+    def test_allowed_email_logs_in(self):
+        state = self._start()
+        response = self._callback(state, {'email': 'Alice@gmail.com', 'email_verified': True})
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as sess:
+            self.assertTrue(sess['logged_in'])
+            self.assertEqual(sess['username'], 'alice@gmail.com')
+
+    def test_allowed_domain_logs_in(self):
+        state = self._start()
+        response = self._callback(state, {'email': 'bob@corp.org', 'email_verified': True})
+        self.assertEqual(response.status_code, 302)
+
+    def test_unlisted_email_rejected(self):
+        state = self._start()
+        response = self._callback(state, {'email': 'mallory@gmail.com', 'email_verified': True})
+        self.assertEqual(response.status_code, 403)
+        with self.client.session_transaction() as sess:
+            self.assertNotIn('logged_in', sess)
+
+    def test_unverified_email_rejected(self):
+        state = self._start()
+        response = self._callback(state, {'email': 'alice@gmail.com', 'email_verified': False})
+        self.assertEqual(response.status_code, 403)
+
+    def test_state_mismatch_rejected(self):
+        self._start()
+        response = self._callback('wrong-state', {'email': 'alice@gmail.com', 'email_verified': True})
+        self.assertEqual(response.status_code, 400)
+
+    def test_callback_without_start_rejected(self):
+        response = self._callback('x', {'email': 'alice@gmail.com', 'email_verified': True})
+        self.assertEqual(response.status_code, 400)
+
+    def test_google_mode_disables_password_login(self):
+        with patch('web_app.AUTH_MODE', 'google'):
+            response = self.client.post('/login', data={'username': 'admin', 'password': 'x'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_google_routes_404_when_disabled(self):
+        with patch('web_app.AUTH_MODE', 'password'):
+            self.assertEqual(self.client.get('/auth/google').status_code, 404)
+
+    def test_login_page_shows_google_button(self):
+        self.assertIn(b'Sign in with Google', self.client.get('/login').data)
+
+
 if __name__ == '__main__':
     unittest.main()
