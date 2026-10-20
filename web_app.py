@@ -92,6 +92,18 @@ AUTH_USERNAME = os.environ.get('AUTH_USERNAME', 'admin')
 AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', 'changeme')
 AUTH_ENABLED = os.environ.get('AUTH_ENABLED', 'true').lower() == 'true'
 
+# Admin sign-in method: 'password' (default), 'google', or 'both'.
+# Google sign-in only identifies the admin (scopes: openid email profile); it is unrelated
+# to the central YouTube account that videos are uploaded to.
+AUTH_MODE = os.environ.get('AUTH_MODE', 'password').lower()
+GOOGLE_LOGIN_CLIENT_ID = os.environ.get('GOOGLE_LOGIN_CLIENT_ID', '')
+GOOGLE_LOGIN_CLIENT_SECRET = os.environ.get('GOOGLE_LOGIN_CLIENT_SECRET', '')
+GOOGLE_LOGIN_REDIRECT_URI = os.environ.get('GOOGLE_LOGIN_REDIRECT_URI', '')  # default: derived from request
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', '').split(',') if e.strip()}
+ADMIN_DOMAINS = {d.strip().lower().lstrip('@') for d in os.environ.get('ADMIN_DOMAINS', '').split(',') if d.strip()}
+GOOGLE_LOGIN_SCOPES = ['openid', 'https://www.googleapis.com/auth/userinfo.email',
+                       'https://www.googleapis.com/auth/userinfo.profile']
+
 # Login brute-force protection: too many failures from one IP -> temporary lockout.
 # In-memory (per process); the container runs a single gunicorn worker.
 LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', 5))
@@ -127,6 +139,45 @@ def _credentials_match(username, password):
     user_ok = hmac.compare_digest((username or '').encode('utf-8'), AUTH_USERNAME.encode('utf-8'))
     pass_ok = hmac.compare_digest((password or '').encode('utf-8'), AUTH_PASSWORD.encode('utf-8'))
     return user_ok and pass_ok
+
+
+def _password_login_enabled():
+    return AUTH_MODE in ('password', 'both')
+
+
+def _google_login_enabled():
+    return AUTH_MODE in ('google', 'both') and bool(GOOGLE_LOGIN_CLIENT_ID and GOOGLE_LOGIN_CLIENT_SECRET)
+
+
+def _email_allowed(email):
+    """True if the (verified) email is on the admin allowlist."""
+    email = (email or '').lower()
+    if not email or '@' not in email:
+        return False
+    return email in ADMIN_EMAILS or email.rsplit('@', 1)[1] in ADMIN_DOMAINS
+
+
+def _google_flow():
+    from google_auth_oauthlib.flow import Flow
+    redirect_uri = GOOGLE_LOGIN_REDIRECT_URI or url_for('google_callback', _external=True)
+    client_config = {'web': {
+        'client_id': GOOGLE_LOGIN_CLIENT_ID,
+        'client_secret': GOOGLE_LOGIN_CLIENT_SECRET,
+        'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+        'token_uri': 'https://oauth2.googleapis.com/token',
+        'redirect_uris': [redirect_uri],
+    }}
+    return Flow.from_client_config(client_config, scopes=GOOGLE_LOGIN_SCOPES, redirect_uri=redirect_uri)
+
+
+def _exchange_google_code(code, code_verifier):
+    """Exchange the auth code and return the verified ID-token claims."""
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    flow = _google_flow()
+    flow.fetch_token(code=code, code_verifier=code_verifier)
+    return google_id_token.verify_oauth2_token(
+        flow.credentials.id_token, google_requests.Request(), GOOGLE_LOGIN_CLIENT_ID)
 
 
 def login_required(f):
@@ -178,6 +229,10 @@ def login():
         return redirect(url_for('index'))
     
     if request.method == 'POST':
+        if not _password_login_enabled():
+            return render_template('login.html', error='Password sign-in is disabled',
+                                   google_enabled=_google_login_enabled(), password_enabled=False,
+                                   version=get_full_version()), 403
         username = request.form.get('username')
         password = request.form.get('password')
         ip = request.remote_addr or 'unknown'
@@ -187,6 +242,7 @@ def login():
             response = make_response(render_template(
                 'login.html',
                 error=f'Too many failed attempts. Try again in {retry_after // 60 + 1} minutes.',
+                google_enabled=_google_login_enabled(), password_enabled=True,
                 version=get_full_version()), 429)
             response.headers['Retry-After'] = str(retry_after)
             return response
@@ -200,13 +256,77 @@ def login():
             return redirect(url_for('index'))
         else:
             _record_login_failure(ip)
-            return render_template('login.html', error='Invalid username or password', version=get_full_version())
+            return render_template('login.html', error='Invalid username or password',
+                                   google_enabled=_google_login_enabled(), password_enabled=True,
+                                   version=get_full_version())
     
     # If already logged in, redirect to index
     if session.get('logged_in'):
         return redirect(url_for('index'))
     
-    return render_template('login.html', version=get_full_version())
+    return render_template('login.html', error=request.args.get('error'),
+                           google_enabled=_google_login_enabled(),
+                           password_enabled=_password_login_enabled(),
+                           version=get_full_version())
+
+
+@app.route('/auth/google')
+def google_login():
+    """Start Google sign-in (state + PKCE)."""
+    if not AUTH_ENABLED or not _google_login_enabled():
+        abort(404)
+    flow = _google_flow()
+    auth_url, state = flow.authorization_url(prompt='select_account', include_granted_scopes='false')
+    session['google_oauth_state'] = state
+    session['google_oauth_verifier'] = flow.code_verifier
+    return redirect(auth_url)
+
+
+@app.route('/auth/callback')
+def google_callback():
+    """Finish Google sign-in: verify state + ID token, then check the admin allowlist."""
+    if not AUTH_ENABLED or not _google_login_enabled():
+        abort(404)
+    ip = request.remote_addr or 'unknown'
+    expected_state = session.pop('google_oauth_state', None)
+    verifier = session.pop('google_oauth_verifier', None)
+
+    def _fail(message, status=403):
+        return render_template('login.html', error=message, google_enabled=True,
+                               password_enabled=_password_login_enabled(),
+                               version=get_full_version()), status
+
+    if _login_retry_after(ip):
+        return _fail('Too many failed attempts. Try again later.', 429)
+    if request.args.get('error'):
+        return _fail('Google sign-in was cancelled or denied', 400)
+    state = request.args.get('state', '')
+    code = request.args.get('code')
+    if not expected_state or not verifier or not code or not hmac.compare_digest(state, expected_state):
+        _record_login_failure(ip)
+        return _fail('Invalid sign-in session. Please try again.', 400)
+
+    try:
+        claims = _exchange_google_code(code, verifier)
+    except Exception as e:
+        print(f"Google sign-in failed: {e}")
+        _record_login_failure(ip)
+        return _fail('Google sign-in failed. Please try again.', 400)
+
+    email = (claims.get('email') or '').lower()
+    if not claims.get('email_verified') or not _email_allowed(email):
+        _record_login_failure(ip)
+        print(f"Google sign-in rejected for {email or 'unknown email'}")
+        return _fail('This Google account is not authorized to use this app.')
+
+    _clear_login_failures(ip)
+    session.clear()
+    session['logged_in'] = True
+    session['username'] = email
+    session['name'] = claims.get('name', email)
+    session.permanent = True
+    print(f"Admin signed in via Google: {email}")
+    return redirect(url_for('index'))
 
 
 @app.route('/logout')

@@ -111,6 +111,30 @@
             font-size: 0.95rem;
         }
 
+        .btn-google {
+            display: block;
+            text-align: center;
+            text-decoration: none;
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            color: #333;
+            font-weight: 600;
+            background: white;
+        }
+
+        .btn-google:hover {
+            border-color: #667eea;
+        }
+
+        .divider {
+            text-align: center;
+            color: #999;
+            margin: 20px 0;
+            font-size: 0.9rem;
+        }
+
         .version {
             text-align: center;
             margin-top: 20px;
@@ -168,6 +192,14 @@
         </div>
         {% endif %}
 
+        {% if google_enabled %}
+        <a class="btn-google" href="/auth/google">Sign in with Google</a>
+        {% endif %}
+        {% if google_enabled and password_enabled is not false %}
+        <div class="divider"><span>or</span></div>
+        {% endif %}
+
+        {% if password_enabled is not false %}
         <form method="POST" action="/login">
             <div class="form-group">
                 <label for="username">Username</label>
@@ -175,8 +207,7 @@
                     type="text" 
                     id="username" 
                     name="username" 
-                    required 
-                    autofocus
+                    required
                     autocomplete="username"
                     placeholder="Enter your username"
                 >
@@ -203,6 +234,7 @@
                 Sign In
             </button>
         </form>
+        {% endif %}
 
         <div class="version">
             {{ version }}
@@ -224,7 +256,8 @@
         }
 
         // Auto-focus on username field
-        document.getElementById('username').focus();
+        const usernameInput = document.getElementById('username');
+        if (usernameInput) usernameInput.focus();
     </script>
 </body>
 </html>

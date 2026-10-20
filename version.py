@@ -2,9 +2,9 @@
 Application version information
 """
 
-VERSION = "1.3.3"
-BUILD_DATE = "2026-10-19"
-# Security: gunicorn instead of Flask debug server, login rate limiting, hardened cookies/CORS, non-root container
+VERSION = "1.4.0"
+BUILD_DATE = "2026-10-20"
+# Admin sign-in with Google (email allowlist) alongside password login
 
 def get_version():
     """Get the current application version"""

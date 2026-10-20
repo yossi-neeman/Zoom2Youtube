@@ -31,6 +31,7 @@ credentials/
 *.pickle
 .env
 client_secrets.json
+client_secret_*.json
 
 # SSH keys
 *.pem
