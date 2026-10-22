@@ -2,9 +2,9 @@
 Application version information
 """
 
-VERSION = "1.4.0"
-BUILD_DATE = "2026-10-20"
-# Admin sign-in with Google (email allowlist) alongside password login
+VERSION = "1.5.0"
+BUILD_DATE = "2026-10-22"
+# Google sign-in hand-off for the native Android app (z2y:// redirect + /auth/app-exchange)
 
 def get_version():
     """Get the current application version"""
