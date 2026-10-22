@@ -500,6 +500,44 @@ class TestGoogleAdminLogin(unittest.TestCase):
         response = self._callback('wrong-state', {'email': 'alice@gmail.com', 'email_verified': True})
         self.assertEqual(response.status_code, 400)
 
+    def _app_code(self):
+        self.client.get('/auth/google?app=1')
+        with self.client.session_transaction() as sess:
+            state = sess['google_oauth_state']
+        response = self._callback(state, {'email': 'alice@gmail.com', 'email_verified': True})
+        self.assertEqual(response.status_code, 200)
+        with self.client.session_transaction() as sess:
+            self.assertNotIn('logged_in', sess)  # the browser itself is not signed in
+        body = response.get_data(as_text=True)
+        self.assertIn('z2y://login?code=', body)
+        return body.split('z2y://login?code=')[1].split('"')[0].split('<')[0]
+
+    def test_app_flow_exchanges_code_for_session(self):
+        code = self._app_code()
+        app_client = app.test_client()  # the app's own cookie jar, separate from the browser
+        response = app_client.post('/auth/app-exchange', json={'code': code})
+        self.assertEqual(response.status_code, 200)
+        with app_client.session_transaction() as sess:
+            self.assertTrue(sess['logged_in'])
+            self.assertEqual(sess['username'], 'alice@gmail.com')
+        # single use
+        self.assertEqual(app.test_client().post('/auth/app-exchange', json={'code': code}).status_code, 400)
+
+    def test_app_exchange_rejects_unknown_code(self):
+        response = self.client.post('/auth/app-exchange', json={'code': 'nope'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_app_exchange_rejects_expired_code(self):
+        code = self._app_code()
+        with patch('web_app.time.monotonic', return_value=web_app.time.monotonic() + 1000):
+            self.assertEqual(self.client.post('/auth/app-exchange', json={'code': code}).status_code, 400)
+
+    def test_web_flow_unaffected_by_app_flag_leftover(self):
+        self.client.get('/auth/google?app=1')
+        state = self._start()  # a later plain web sign-in must not use the app hand-off
+        response = self._callback(state, {'email': 'alice@gmail.com', 'email_verified': True})
+        self.assertEqual(response.status_code, 302)
+
     def test_callback_without_start_rejected(self):
         response = self._callback('x', {'email': 'alice@gmail.com', 'email_verified': True})
         self.assertEqual(response.status_code, 400)

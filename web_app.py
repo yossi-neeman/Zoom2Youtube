@@ -8,6 +8,7 @@ import json
 import shutil
 import threading
 import hmac
+import secrets
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -110,6 +111,32 @@ LOGIN_MAX_FAILURES = int(os.environ.get('LOGIN_MAX_FAILURES', 5))
 LOGIN_WINDOW_SECONDS = int(os.environ.get('LOGIN_WINDOW_SECONDS', 900))
 _login_failures = defaultdict(deque)
 _login_lock = threading.Lock()
+
+# Native app sign-in: after Google sign-in in the system browser the server redirects to
+# z2y://login?code=<one-time code>; the app exchanges it for a session cookie.
+# In-memory (single gunicorn worker), short-lived, single use.
+APP_LOGIN_SCHEME = 'z2y'
+APP_LOGIN_CODE_TTL = 120
+_app_login_codes = {}
+_app_login_lock = threading.Lock()
+
+
+def _issue_app_login_code(email, name):
+    code = secrets.token_urlsafe(32)
+    now = time.monotonic()
+    with _app_login_lock:
+        for k in [k for k, v in _app_login_codes.items() if v[0] < now]:
+            del _app_login_codes[k]
+        _app_login_codes[code] = (now + APP_LOGIN_CODE_TTL, email, name)
+    return code
+
+
+def _redeem_app_login_code(code):
+    with _app_login_lock:
+        entry = _app_login_codes.pop(code, None)
+    if entry and entry[0] >= time.monotonic():
+        return entry[1], entry[2]
+    return None
 
 
 def _login_retry_after(ip):
@@ -279,6 +306,7 @@ def google_login():
     auth_url, state = flow.authorization_url(prompt='select_account', include_granted_scopes='false')
     session['google_oauth_state'] = state
     session['google_oauth_verifier'] = flow.code_verifier
+    session['google_oauth_app'] = request.args.get('app') == '1'
     return redirect(auth_url)
 
 
@@ -290,6 +318,7 @@ def google_callback():
     ip = request.remote_addr or 'unknown'
     expected_state = session.pop('google_oauth_state', None)
     verifier = session.pop('google_oauth_verifier', None)
+    from_app = bool(session.pop('google_oauth_app', False))
 
     def _fail(message, status=403):
         return render_template('login.html', error=message, google_enabled=True,
@@ -320,6 +349,11 @@ def google_callback():
         return _fail('This Google account is not authorized to use this app.')
 
     _clear_login_failures(ip)
+    if from_app:
+        session.clear()
+        code = _issue_app_login_code(email, claims.get('name', email))
+        print(f"Admin signed in via Google (app): {email}")
+        return render_template('app_return.html', app_url=f'{APP_LOGIN_SCHEME}://login?code={code}')
     session.clear()
     session['logged_in'] = True
     session['username'] = email
@@ -327,6 +361,29 @@ def google_callback():
     session.permanent = True
     print(f"Admin signed in via Google: {email}")
     return redirect(url_for('index'))
+
+
+@app.route('/auth/app-exchange', methods=['POST'])
+def app_exchange():
+    """Native app: trade the one-time code from the z2y:// redirect for a session cookie."""
+    if not AUTH_ENABLED or not _google_login_enabled():
+        abort(404)
+    ip = request.remote_addr or 'unknown'
+    if _login_retry_after(ip):
+        return jsonify({'success': False, 'error': 'Too many failed attempts. Try again later.'}), 429
+    code = (request.get_json(silent=True) or {}).get('code', '')
+    redeemed = _redeem_app_login_code(code) if isinstance(code, str) and code else None
+    if not redeemed:
+        _record_login_failure(ip)
+        return jsonify({'success': False, 'error': 'Sign-in expired. Please try again.'}), 400
+    email, name = redeemed
+    _clear_login_failures(ip)
+    session.clear()
+    session['logged_in'] = True
+    session['username'] = email
+    session['name'] = name
+    session.permanent = True
+    return jsonify({'success': True, 'username': email})
 
 
 @app.route('/logout')
