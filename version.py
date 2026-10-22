@@ -2,9 +2,9 @@
 Application version information
 """
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 BUILD_DATE = "2026-10-22"
-# Google sign-in hand-off for the native Android app (z2y:// redirect + /auth/app-exchange)
+# Remove the unused AWS Lambda deployment files
 
 def get_version():
     """Get the current application version"""
