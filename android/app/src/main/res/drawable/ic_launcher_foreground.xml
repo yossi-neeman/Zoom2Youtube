@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Video camera: rounded body + lens wedge, inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,42 H58 A5,5 0 0 1 63,47 V61 A5,5 0 0 1 58,66 H32 A5,5 0 0 1 27,61 V47 A5,5 0 0 1 32,42 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M67,51 L81,43 V65 L67,57 Z" />
+</vector>
