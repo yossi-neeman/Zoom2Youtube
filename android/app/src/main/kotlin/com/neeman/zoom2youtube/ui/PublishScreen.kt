@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +32,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -41,6 +45,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,16 +63,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.neeman.zoom2youtube.data.Recording
 import com.neeman.zoom2youtube.data.SEDARIM
 import com.neeman.zoom2youtube.data.UploadResult
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 private val PRIVACY = listOf("public" to "Public", "unlisted" to "Unlisted", "private" to "Private")
 
+/** The one screen: pick מסכת, דף, playlist and recording, then download + upload in a single step. */
 @Composable
-fun UploadScreen(state: UiState, vm: AppViewModel) {
+fun PublishScreen(state: UiState, vm: AppViewModel) {
     val snackbar = remember { SnackbarHostState() }
     SnackbarEffect(state.message, snackbar, vm)
-    KeepScreenOn(state.uploading)
+    KeepScreenOn(state.publishing)
 
     GradientBackground {
         Scaffold(
@@ -85,38 +96,17 @@ fun UploadScreen(state: UiState, vm: AppViewModel) {
                 BrandHeader(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
                     if (state.username.isNotEmpty()) GlassPill("👤 ${state.username}", Modifier.weight(1f, fill = false))
                     Spacer(Modifier.size(8.dp))
-                    GlassPill("Logout", onClick = { if (!state.uploading) vm.signOut() })
+                    GlassPill("Logout", onClick = { if (!state.publishing) vm.signOut() })
                 }
                 WhiteCard {
-                    TabsRow(
-                        activeUpload = true, uploadEnabled = true,
-                        onRecordings = { if (!state.uploading) vm.backToRecordings() }, onUpload = {},
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text("Upload to YouTube", color = InkDark, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Publish to YouTube", color = InkDark, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(14.dp))
 
-                    state.downloaded?.let {
-                        // Web "📹 Downloaded Recording" box.
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(FieldShape)
-                                .background(SelectedBg)
-                                .border(2.dp, Purple1, FieldShape)
-                                .padding(14.dp),
-                        ) {
-                            Text("📹 Downloaded Recording", color = InkDark, fontWeight = FontWeight.SemiBold)
-                            Text(it.recording.topic, color = InkLight, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
-                        }
-                        Spacer(Modifier.height(16.dp))
-                    }
-
-                    val result = state.uploadResult
+                    val result = state.publishResult
                     if (result != null) {
-                        SuccessCard(result, onDone = vm::finishUpload)
+                        SuccessCard(result, onDone = vm::finishPublish)
                     } else {
-                        UploadForm(state, vm)
+                        PublishForm(state, vm)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -126,8 +116,8 @@ fun UploadScreen(state: UiState, vm: AppViewModel) {
 }
 
 @Composable
-private fun UploadForm(state: UiState, vm: AppViewModel) {
-    val enabled = !state.uploading
+private fun PublishForm(state: UiState, vm: AppViewModel) {
+    val enabled = !state.publishing
     val hebrew = TextStyle(textDirection = TextDirection.Content)
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -154,26 +144,6 @@ private fun UploadForm(state: UiState, vm: AppViewModel) {
             modifier = Modifier.fillMaxWidth(),
         )
 
-        OutlinedTextField(
-            value = state.title, onValueChange = {}, readOnly = true,
-            label = { Text("Video title") }, placeholder = { Text("Choose מסכת and דף") },
-            textStyle = hebrew, shape = FieldShape, colors = fieldColors(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        OutlinedTextField(
-            value = state.description, onValueChange = vm::setDescription,
-            label = { Text("Description (optional)") }, minLines = 3,
-            enabled = enabled, shape = FieldShape, colors = fieldColors(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        DropdownField(label = "Privacy", value = PRIVACY.first { it.first == state.privacy }.second, enabled = enabled) { close ->
-            PRIVACY.forEach { (key, name) ->
-                DropdownMenuItem(text = { Text(name) }, onClick = { vm.setPrivacy(key); close() })
-            }
-        }
-
         DropdownField(
             label = "Playlist (optional)",
             value = state.playlists.firstOrNull { it.id == state.playlistId }?.let { "${it.title} (${it.itemCount} videos)" }
@@ -186,6 +156,28 @@ private fun UploadForm(state: UiState, vm: AppViewModel) {
                     text = { Text("${p.title} (${p.itemCount} videos)", style = hebrew) },
                     onClick = { vm.setPlaylist(p.id); close() },
                 )
+            }
+        }
+
+        OutlinedTextField(
+            value = state.title, onValueChange = {}, readOnly = true,
+            label = { Text("Video title") }, placeholder = { Text("Choose מסכת and דף") },
+            textStyle = hebrew, shape = FieldShape, colors = fieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        RecordingsSection(state, vm)
+
+        OutlinedTextField(
+            value = state.description, onValueChange = vm::setDescription,
+            label = { Text("Description (optional)") }, minLines = 3,
+            enabled = enabled, shape = FieldShape, colors = fieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        DropdownField(label = "Privacy", value = PRIVACY.first { it.first == state.privacy }.second, enabled = enabled) { close ->
+            PRIVACY.forEach { (key, name) ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { vm.setPrivacy(key); close() })
             }
         }
 
@@ -208,25 +200,102 @@ private fun UploadForm(state: UiState, vm: AppViewModel) {
             }
         }
 
-        if (state.uploading) {
+        if (state.publishing) {
             LinearProgressIndicator(
                 Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
                 color = Purple1, trackColor = Hairline,
             )
-            Text(state.uploadStatus, color = InkDark)
+            Text(state.publishStatus, color = InkDark)
             Text(
-                "You can keep this screen open; the server continues even if the connection drops.",
+                "This can take several minutes. You can keep this screen open; the server continues even if the connection drops.",
                 fontSize = 13.sp, color = InkLight,
             )
         }
 
         GradientButton(
-            if (state.uploading) "Uploading..." else "Upload to YouTube",
-            onClick = vm::upload,
-            enabled = enabled && state.title.isNotEmpty(),
-            loading = state.uploading,
+            if (state.publishing) "Publishing..." else "Download & Upload to YouTube",
+            onClick = vm::publish,
+            enabled = enabled && state.title.isNotEmpty() && state.selected != null,
+            loading = state.publishing,
         )
     }
+}
+
+/** The Zoom recording to publish: recent recordings, newest pre-selected. */
+@Composable
+private fun RecordingsSection(state: UiState, vm: AppViewModel) {
+    val enabled = !state.publishing
+    Column {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Zoom recording", color = InkDark, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(
+                "↻", color = Purple1, fontSize = 26.sp,
+                modifier = Modifier.clickable(enabled = enabled && !state.recordingsLoading, onClick = vm::loadRecordings).padding(6.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(1, 5, 7, 30).forEach { d ->
+                FilterChip(
+                    selected = state.days == d,
+                    onClick = { vm.setDays(d) },
+                    enabled = enabled,
+                    label = { Text(if (d == 1) "1 day" else "$d days") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = SelectedBg, selectedLabelColor = Purple1,
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true, selected = state.days == d,
+                        borderColor = Hairline, selectedBorderColor = Purple1,
+                        borderWidth = 2.dp, selectedBorderWidth = 2.dp,
+                    ),
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        when {
+            state.recordingsLoading -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
+                CircularProgressIndicator(color = Purple1)
+            }
+            state.recordingsError != null -> Alert(state.recordingsError, isError = true)
+            state.recordings.isEmpty() -> Text("No recordings found in the selected time range.", color = InkLight)
+            else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                state.recordings.forEach { rec ->
+                    RecordingItem(
+                        rec, selected = rec.id == state.selected?.id,
+                        onClick = { if (enabled) vm.select(rec) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Web `.recording-item`. */
+@Composable
+private fun RecordingItem(rec: Recording, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (selected) SelectedBg else Color.White)
+            .border(2.dp, if (selected) Purple1 else Hairline, shape)
+            .clickable(onClick = onClick)
+            .padding(15.dp),
+    ) {
+        Text(rec.topic, color = InkDark, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text("📅 ${formatTime(rec.startTime)}  ⏱ ${rec.durationMin} min", color = InkLight, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+private fun formatTime(iso: String): String = try {
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.parse(iso))
+} catch (e: Exception) {
+    iso
 }
 
 @Composable
@@ -241,8 +310,8 @@ private fun SuccessCard(result: UploadResult, onDone: () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("✓ Upload Complete!", color = SuccessFg, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-        Text("The video is on YouTube and has been deleted from the server.", color = SuccessFg)
+        Text("✓ Published!", color = SuccessFg, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        Text("Downloaded from Zoom, uploaded to YouTube and deleted from the server.", color = SuccessFg)
         Text(result.videoUrl, color = SuccessFg, fontSize = 14.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlineButton("Open", onClick = {
@@ -293,5 +362,15 @@ private fun KeepScreenOn(on: Boolean) {
     DisposableEffect(on) {
         view.keepScreenOn = on
         onDispose { view.keepScreenOn = false }
+    }
+}
+
+@Composable
+internal fun SnackbarEffect(message: String?, host: SnackbarHostState, vm: AppViewModel) {
+    LaunchedEffect(message) {
+        if (message != null) {
+            host.showSnackbar(message)
+            vm.messageShown()
+        }
     }
 }

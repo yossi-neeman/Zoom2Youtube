@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -14,9 +13,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.neeman.zoom2youtube.ui.AppViewModel
 import com.neeman.zoom2youtube.ui.FullScreenSpinner
 import com.neeman.zoom2youtube.ui.LoginScreen
-import com.neeman.zoom2youtube.ui.RecordingsScreen
+import com.neeman.zoom2youtube.ui.PublishScreen
 import com.neeman.zoom2youtube.ui.Screen
-import com.neeman.zoom2youtube.ui.UploadScreen
 import com.neeman.zoom2youtube.ui.Z2YTheme
 
 class MainActivity : ComponentActivity() {
@@ -34,12 +32,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             Z2YTheme {
                 val state by vm.state.collectAsStateWithLifecycle()
-                BackHandler(enabled = state.screen == Screen.Upload) { vm.backToRecordings() }
                 when (state.screen) {
                     Screen.Booting -> FullScreenSpinner()
                     Screen.Login -> LoginScreen(state, vm)
-                    Screen.Recordings -> RecordingsScreen(state, vm)
-                    Screen.Upload -> UploadScreen(state, vm)
+                    Screen.Publish -> PublishScreen(state, vm)
                 }
             }
         }

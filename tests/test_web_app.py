@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import sys
+import time
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -380,6 +381,168 @@ class TestErrorHandling(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.get_json(), first.get_json())
         mock_uploader_class.return_value.upload_video.assert_called_once()
+
+
+class FakeStorage:
+    """Dict-backed stand-in for the small JSON files the publish flow persists."""
+
+    def __init__(self):
+        self.files = {}
+
+    def exists(self, key):
+        return key in self.files
+
+    def read_text(self, key):
+        return self.files[key]
+
+    def write_text(self, key, content):
+        self.files[key] = content
+
+
+class TestPublish(unittest.TestCase):
+    """POST /api/publish: download + upload as one background job"""
+
+    MEETINGS = [
+        {'uuid': 'old', 'topic': 'Yesterday', 'start_time': '2024-01-14T10:00:00Z',
+         'recording_files': [{'file_type': 'MP4'}]},
+        {'uuid': 'new', 'topic': 'Today', 'start_time': '2024-01-15T10:00:00Z',
+         'recording_files': [{'file_type': 'MP4'}, {'file_type': 'M4A'}]},
+        {'uuid': 'audio-only', 'topic': 'Later', 'start_time': '2024-01-16T10:00:00Z',
+         'recording_files': [{'file_type': 'M4A'}]},
+    ]
+    BODY = {'masechet': 'חולין', 'daf': 'קיט', 'playlist_id': 'PL1'}
+
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.client = app.test_client()
+        web_app._jobs.clear()
+        web_app._job_by_recording.clear()
+        self.storage = FakeStorage()
+        self.zoom = Mock()
+        self.zoom.get_recordings.return_value = self.MEETINGS
+        self.download = Mock(return_value=('recordings/x/a.mp4', False))
+        self.upload = Mock(return_value='vid123')
+        for target in (
+            patch('web_app.storage', self.storage),
+            patch('web_app._zoom_client', return_value=self.zoom),
+            patch('web_app._download_meeting', self.download),
+            patch('web_app._upload_video', self.upload),
+        ):
+            target.start()
+            self.addCleanup(target.stop)
+
+    def _wait(self, job_id, timeout=5):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            job = self.client.get(f'/api/publish/{job_id}').get_json()['job']
+            if job['status'] in ('succeeded', 'failed'):
+                return job
+            time.sleep(0.01)
+        self.fail('job did not finish')
+
+    def test_requires_masechet_and_daf(self):
+        for body in ({}, {'masechet': 'חולין'}, {'daf': 'קיט'}, {'masechet': ' ', 'daf': 'קיט'}):
+            self.assertEqual(self.client.post('/api/publish', json=body).status_code, 400)
+
+    def test_rejects_bad_privacy_and_days(self):
+        self.assertEqual(self.client.post('/api/publish', json={**self.BODY, 'privacy': 'x'}).status_code, 400)
+        self.assertEqual(self.client.post('/api/publish', json={**self.BODY, 'days': 99}).status_code, 400)
+
+    def test_publishes_latest_recording_with_generated_title(self):
+        resp = self.client.post('/api/publish', json={**self.BODY, 'description': 'd', 'privacy': 'unlisted'})
+        self.assertEqual(resp.status_code, 202)
+        job = self._wait(resp.get_json()['job']['id'])
+
+        self.assertEqual(job['status'], 'succeeded')
+        self.assertEqual(job['video_url'], 'https://www.youtube.com/watch?v=vid123')
+        self.assertEqual(job['recording']['id'], 'new')  # newest one that has an MP4
+        self.upload.assert_called_once_with(
+            'recordings/x/a.mp4', 'חולין | קיט | בית כנסת נריה', 'd', 'PL1', 'חולין - קיט', 'unlisted')
+
+    def test_explicit_recording_id(self):
+        resp = self.client.post('/api/publish', json={**self.BODY, 'recording_id': 'old'})
+        self.assertEqual(self._wait(resp.get_json()['job']['id'])['recording']['id'], 'old')
+
+    def test_unknown_recording_id_is_404(self):
+        resp = self.client.post('/api/publish', json={**self.BODY, 'recording_id': 'nope'})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_repeat_request_does_not_upload_twice(self):
+        first = self.client.post('/api/publish', json=self.BODY).get_json()
+        self._wait(first['job']['id'])
+        second = self.client.post('/api/publish', json=self.BODY)
+
+        self.assertEqual(second.status_code, 202)
+        self.assertTrue(second.get_json()['deduplicated'])
+        self.assertEqual(second.get_json()['job']['id'], first['job']['id'])
+        self.upload.assert_called_once()
+
+    def test_already_published_survives_restart(self):
+        self._wait(self.client.post('/api/publish', json=self.BODY).get_json()['job']['id'])
+        web_app._jobs.clear()  # as after a restart: only the persisted record is left
+        web_app._job_by_recording.clear()
+
+        resp = self.client.post('/api/publish', json=self.BODY)
+
+        self.assertEqual(resp.status_code, 200)
+        job = resp.get_json()['job']
+        self.assertEqual((job['status'], job['already_published']), ('succeeded', True))
+        self.assertEqual(job['video_id'], 'vid123')
+        self.upload.assert_called_once()
+
+    def test_force_publishes_again(self):
+        self._wait(self.client.post('/api/publish', json=self.BODY).get_json()['job']['id'])
+        resp = self.client.post('/api/publish', json={**self.BODY, 'force': True})
+        self._wait(resp.get_json()['job']['id'])
+        self.assertEqual(self.upload.call_count, 2)
+
+    def test_failed_job_reports_error_and_can_be_retried(self):
+        self.upload.side_effect = [RuntimeError('quota exceeded'), 'vid123']
+        failed = self._wait(self.client.post('/api/publish', json=self.BODY).get_json()['job']['id'])
+        self.assertEqual((failed['status'], failed['error']), ('failed', 'quota exceeded'))
+
+        retry = self.client.post('/api/publish', json=self.BODY).get_json()
+        self.assertFalse(retry['deduplicated'])
+        self.assertEqual(self._wait(retry['job']['id'])['status'], 'succeeded')
+
+    def test_unknown_job_is_404(self):
+        self.assertEqual(self.client.get('/api/publish/nope').status_code, 404)
+
+
+class TestApiToken(unittest.TestCase):
+    """Bearer-token access for scheduled jobs"""
+
+    TOKEN = 'a-long-random-token-for-cron-0123456789'
+
+    def setUp(self):
+        app.config['TESTING'] = True
+        self.client = app.test_client()
+        web_app._login_failures.clear()
+        patcher = patch.multiple('web_app', AUTH_ENABLED=True, API_TOKEN=self.TOKEN)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _get(self, token, path='/api/publish/nope'):
+        return self.client.get(path, headers={'Authorization': f'Bearer {token}'})
+
+    def test_valid_token_is_authenticated(self):
+        self.assertEqual(self._get(self.TOKEN).status_code, 404)  # past auth, job just doesn't exist
+
+    def test_missing_or_wrong_token_is_rejected(self):
+        self.assertEqual(self.client.get('/api/publish/nope').status_code, 401)
+        self.assertEqual(self._get('wrong').status_code, 401)
+
+    def test_token_only_works_on_api_paths(self):
+        self.assertEqual(self._get(self.TOKEN, '/').status_code, 302)
+
+    def test_disabled_when_not_configured(self):
+        with patch('web_app.API_TOKEN', ''):
+            self.assertEqual(self._get('').status_code, 401)
+
+    def test_wrong_tokens_trigger_lockout(self):
+        for _ in range(web_app.LOGIN_MAX_FAILURES):
+            self._get('wrong')
+        self.assertEqual(self._get(self.TOKEN).status_code, 401)
 
 
 class TestSecurityHardening(unittest.TestCase):

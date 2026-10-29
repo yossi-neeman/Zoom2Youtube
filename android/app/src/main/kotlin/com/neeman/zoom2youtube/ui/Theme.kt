@@ -193,32 +193,6 @@ fun GlassPill(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)
     }
 }
 
-/** Web `.tabs`: underlined active tab in purple. */
-@Composable
-fun TabsRow(activeUpload: Boolean, uploadEnabled: Boolean, onRecordings: () -> Unit, onUpload: () -> Unit) {
-    Row(Modifier.fillMaxWidth()) {
-        Tab("📥 Recordings", !activeUpload, true, onRecordings, Modifier.weight(1f))
-        Tab("📤 Upload", activeUpload, uploadEnabled, onUpload, Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun Tab(text: String, active: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Column(
-        modifier.clickable(enabled = enabled && !active, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text,
-            color = if (active) Purple1 else InkLight.copy(alpha = if (enabled) 1f else 0.45f),
-            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            fontSize = 16.sp,
-            modifier = Modifier.padding(vertical = 12.dp),
-        )
-        Box(Modifier.fillMaxWidth().height(3.dp).background(if (active) Purple1 else Hairline))
-    }
-}
-
 @Composable
 fun FullScreenSpinner() {
     GradientBackground {
