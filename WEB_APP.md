@@ -5,8 +5,8 @@ Zoom to YouTube now includes a beautiful web interface that works on both deskto
 ## Features
 
 - 📱 **Responsive Design** - Works on desktop, tablet, and mobile
-- 📥 **Browse Recordings** - View and select Zoom recordings from the last 1-30 days
-- 📤 **Easy Upload** - Upload to YouTube with a simple form
+- 🚀 **One-step Publish** - Pick מסכת, דף and playlist once; the Zoom download and YouTube upload run as a single job
+- 📥 **Browse Recordings** - Choose a Zoom recording from the last 1-30 days (the latest is pre-selected)
 - 🖼️ **Thumbnail Generator** - Create Hebrew thumbnails with live preview
 - 📋 **Playlist Management** - Add videos to playlists automatically
 - ⚙️ **Settings** - Configure default privacy and preferences
@@ -60,21 +60,16 @@ Then open: http://localhost:5000
 
 ## Using the Web Interface
 
-### 1. Recordings Tab
+### 1. Publish Tab
 
-- **Select time range**: Choose to show recordings from the last 1, 5, 7, or 30 days
-- **Click on a recording** to select it
-- **Click "Download Selected"** to download the recording
-
-### 2. Upload Tab
-
-- **Enter video details**: Title (required), description (optional)
-- **Choose privacy**: Private, Unlisted, or Public
+- **Enter מסכת and דף** - the title (`מסכת | דף | בית כנסת נריה`) and thumbnail (`מסכת - דף`) are generated from them
 - **Select playlist**: Optionally add to a playlist
-- **Add thumbnail**: Enter Hebrew text and preview before uploading
-- **Click "Upload to YouTube"** when ready
+- **Pick the Zoom recording**: the last 1, 5, 7, or 30 days; the most recent is pre-selected
+- **Choose privacy / description** (optional)
+- **Click "Download & Upload to YouTube"** - the server downloads the recording, uploads it and
+  deletes the file; the page shows progress and the video link when done
 
-### 3. Settings Tab
+### 2. Settings Tab
 
 - **Default Privacy**: Set your preferred default privacy level
 - **Auto-generate Thumbnails**: Enable/disable automatic thumbnail creation
@@ -94,11 +89,38 @@ Simply access http://your-server-ip:5000 from your mobile browser!
 The web app exposes REST API endpoints:
 
 - `GET /api/recordings?days=5` - Get available recordings
-- `POST /api/download` - Download a recording
+- `POST /api/publish` - Download a recording and upload it to YouTube (background job, see below)
+- `GET /api/publish/<job_id>` - Progress of a publish job
 - `GET /api/playlists` - List YouTube playlists
-- `POST /api/upload` - Upload video to YouTube
 - `POST /api/thumbnail/preview` - Generate thumbnail preview
 - `GET/POST /api/config` - Get/update configuration
+- `POST /api/download`, `POST /api/upload` - The two halves of publish, kept for older clients
+
+### Publishing from a script or cron
+
+Set `API_TOKEN` (24+ characters) on the server and send it as a bearer token; it is accepted on
+`/api/*` only. `POST /api/publish` returns immediately with a job; poll it until `status` is
+`succeeded` or `failed`.
+
+```bash
+curl -sS -X POST "$Z2Y_URL/api/publish" \
+  -H "Authorization: Bearer $Z2Y_API_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"masechet": "חולין", "daf": "קיט", "playlist_id": "PL..."}'
+# -> {"success": true, "deduplicated": false, "job": {"id": "abc", "status": "queued", ...}}
+
+curl -sS "$Z2Y_URL/api/publish/abc" -H "Authorization: Bearer $Z2Y_API_TOKEN"
+# -> {"success": true, "job": {"status": "succeeded", "video_url": "https://www.youtube.com/watch?v=..."}}
+```
+
+Body fields: `masechet`, `daf` (required); `playlist_id`; `recording_id` (default: the most recent
+recording with an MP4 in the last `days`); `days` (default 2, max 30); `description`; `privacy`
+(`public` default, `unlisted`, `private`); `force`.
+
+A recording is published at most once: calling again returns the running or finished job
+(`"deduplicated": true`), so a retried or double-fired cron is harmless. Pass `"force": true` to
+publish a recording again on purpose. Job status is kept in memory, so a server restart makes
+`GET /api/publish/<id>` return 404 - then check YouTube Studio / re-POST (what was already
+published is remembered across restarts).
 
 ## Production Deployment
 

@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Talks to the existing Flask backend (cookie session + JSON endpoints). No backend changes needed. */
+/** Talks to the Flask backend (cookie session + JSON endpoints). */
 class ApiClient(private val prefs: Prefs) {
 
     private val http = OkHttpClient.Builder()
@@ -33,9 +33,6 @@ class ApiClient(private val prefs: Prefs) {
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
-
-    // Download/upload block until the server finishes the whole job.
-    private val longHttp = http.newBuilder().readTimeout(70, TimeUnit.MINUTES).build()
 
     // The login endpoint answers success with a redirect; we want to see it, not follow it.
     private val loginHttp = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
@@ -100,15 +97,6 @@ class ApiClient(private val prefs: Prefs) {
         }
     }
 
-    /**
-     * Not retried automatically: the server writes the file in place, so a retry after a dropped
-     * connection could pick up a half-written file as "already downloaded".
-     */
-    suspend fun download(recordingId: String): DownloadResult {
-        val o = json("/api/download", JSONObject().put("recording_id", recordingId), long = true)
-        return DownloadResult(o.getString("filepath"), o.optBoolean("already_exists"))
-    }
-
     suspend fun playlists(): List<Playlist> {
         val arr = json("/api/playlists").getJSONArray("playlists")
         return (0 until arr.length()).map {
@@ -124,37 +112,48 @@ class ApiClient(private val prefs: Prefs) {
     }
 
     /**
-     * The server blocks until YouTube has the video, which a proxy (e.g. Cloudflare, ~100s) may cut
-     * off. `/api/upload` is idempotent per video_file - a repeat request waits for the in-flight
-     * upload or returns its result - so on transient failures we keep asking until [deadlineMs].
+     * Download from Zoom and upload to YouTube in one go. The server runs it as a background job, so
+     * a dropped connection doesn't stop it: we poll until it finishes. Asking again is always safe -
+     * the server starts at most one job per recording and hands back the existing one.
      */
-    suspend fun upload(
-        videoFile: String,
-        title: String,
+    suspend fun publish(
+        masechet: String,
+        daf: String,
+        playlistId: String?,
+        recordingId: String,
         description: String,
         privacy: String,
-        playlistId: String?,
-        thumbnailText: String,
-        onReconnect: (attempt: Int) -> Unit,
+        onStatus: (String) -> Unit,
     ): UploadResult {
         val body = JSONObject()
-            .put("video_file", videoFile)
-            .put("title", title)
+            .put("masechet", masechet)
+            .put("daf", daf)
+            .put("recording_id", recordingId)
             .put("description", description)
             .put("privacy", privacy)
-            .put("thumbnail_text", thumbnailText)
         if (!playlistId.isNullOrEmpty()) body.put("playlist_id", playlistId)
 
-        val deadline = System.currentTimeMillis() + UPLOAD_DEADLINE_MS
-        var attempt = 0
+        val deadline = System.currentTimeMillis() + PUBLISH_DEADLINE_MS
+        var job = retrying(deadline) { json("/api/publish", body).getJSONObject("job") }
+        while (true) {
+            when (job.getString("status")) {
+                "succeeded" -> return UploadResult(job.getString("video_id"), job.getString("video_url"))
+                "failed" -> throw ApiException(job.optString("error").ifEmpty { "Publishing failed" })
+            }
+            onStatus(job.getString("status"))
+            delay(POLL_DELAY_MS)
+            val id = job.getString("id")
+            job = retrying(deadline) { json("/api/publish/$id").getJSONObject("job") }
+        }
+    }
+
+    /** Repeats [block] while it fails with a transient error (proxy timeout, dropped connection). */
+    private suspend fun <T> retrying(deadline: Long, block: suspend () -> T): T {
         while (true) {
             try {
-                val o = json("/api/upload", body, long = true)
-                return UploadResult(o.getString("video_id"), o.getString("video_url"))
+                return block()
             } catch (e: ApiException) {
                 if (!e.retryable || System.currentTimeMillis() > deadline) throw e
-                attempt++
-                onReconnect(attempt)
                 delay(RETRY_DELAY_MS)
             }
         }
@@ -165,7 +164,6 @@ class ApiClient(private val prefs: Prefs) {
     private suspend fun json(
         path: String,
         body: JSONObject? = null,
-        long: Boolean = false,
         allowRelogin: Boolean = true,
     ): JSONObject {
         if (baseUrl.isEmpty()) throw ApiException("Not signed in", 401)
@@ -175,7 +173,7 @@ class ApiClient(private val prefs: Prefs) {
         }
 
         val (code, text) = try {
-            (if (long) longHttp else http).newCall(builder.build()).await().use {
+            http.newCall(builder.build()).await().use {
                 it.code to it.body?.string().orEmpty()
             }
         } catch (e: IOException) {
@@ -187,7 +185,7 @@ class ApiClient(private val prefs: Prefs) {
 
         if (code == 401 && allowRelogin) {
             relogin()
-            return json(path, body, long, allowRelogin = false)
+            return json(path, body, allowRelogin = false)
         }
 
         val transient = code in TRANSIENT_CODES
@@ -210,7 +208,8 @@ class ApiClient(private val prefs: Prefs) {
 
     companion object {
         private val TRANSIENT_CODES = setOf(408, 502, 503, 504, 520, 522, 524)
-        private const val UPLOAD_DEADLINE_MS = 2L * 60 * 60 * 1000
+        private const val PUBLISH_DEADLINE_MS = 2L * 60 * 60 * 1000
+        private const val POLL_DELAY_MS = 3_000L
         private const val RETRY_DELAY_MS = 3_000L
 
         fun normalizeUrl(input: String): String {

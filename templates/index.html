@@ -336,49 +336,19 @@
 
         <div class="card">
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('recordings', event)">📥 Recordings</button>
-                <button class="tab" onclick="switchTab('upload', event)">📤 Upload</button>
+                <button class="tab active" onclick="switchTab('publish', event)">🚀 Publish</button>
                 <button class="tab" onclick="switchTab('settings', event)">⚙️ Settings</button>
                 {% if debug_enabled %}<button class="tab" onclick="switchTab('debug', event)">🔧 Debug</button>{% endif %}
             </div>
 
-            <!-- Recordings Tab -->
-            <div id="recordings-tab" class="tab-content active">
-                <h2>Available Zoom Recordings</h2>
-                <div class="form-group">
-                    <label>Show recordings from last:</label>
-                    <select id="daysFilter" onchange="loadRecordings()">
-                        <option value="1">1 day</option>
-                        <option value="5" selected>5 days</option>
-                        <option value="7">7 days</option>
-                        <option value="30">30 days</option>
-                    </select>
-                </div>
-                <div id="recordingsContainer" class="recordings-list">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <p>Loading recordings...</p>
-                    </div>
-                </div>
-                <button class="btn" onclick="downloadSelected()" id="downloadBtn" style="display:none; margin-top: 20px;">
-                    Download Selected
-                </button>
-            </div>
+            <!-- Publish Tab: download from Zoom + upload to YouTube in one step -->
+            <div id="publish-tab" class="tab-content active">
+                <h2>Publish to YouTube</h2>
 
-            <!-- Upload Tab -->
-            <div id="upload-tab" class="tab-content">
-                <h2>Upload to YouTube</h2>
-                
-                <!-- Downloaded Recording Info -->
-                <div id="downloadedRecordingInfo" style="display:none; padding: 15px; background: #f0f8ff; border-left: 4px solid #667eea; margin-bottom: 20px; border-radius: 4px;">
-                    <h3 style="margin-top: 0; color: #333; font-size: 1.1rem;">📹 Downloaded Recording</h3>
-                    <p id="recordingInfoText" style="margin: 5px 0; color: #555;"></p>
-                </div>
-
-                <form id="uploadForm" onsubmit="handleUpload(event)">
+                <form id="publishForm" onsubmit="handlePublish(event)">
                     <div class="form-group">
                         <label>מסכת *</label>
-                        <select id="masechetSelect" required onchange="updateTitleAndThumbnail()">
+                        <select id="masechetSelect" required onchange="updateTitle()">
                             <option value="">בחר מסכת...</option>
                             <optgroup label="סדר זרעים">
                                 <option value="ברכות">ברכות</option>
@@ -460,17 +430,40 @@
 
                     <div class="form-group">
                         <label>דף *</label>
-                        <input type="text" id="dafInput" required placeholder="קיט" dir="rtl" oninput="updateTitleAndThumbnail()">
+                        <input type="text" id="dafInput" required placeholder="קיט" dir="rtl" oninput="updateTitle()">
                     </div>
 
                     <div class="form-group">
-                        <label>Video Title *</label>
-                        <input type="text" id="videoTitle" required placeholder="Will be auto-generated" readonly style="background-color: #f5f5f5;">
+                        <label>Playlist (Optional)</label>
+                        <select id="videoPlaylist" onchange="savePlaylistSelection()">
+                            <option value="">No playlist</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Video Title</label>
+                        <input type="text" id="videoTitle" placeholder="Choose מסכת and דף" dir="rtl" readonly style="background-color: #f5f5f5;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Zoom Recording</label>
+                        <select id="daysFilter" onchange="loadRecordings()" style="margin-bottom: 10px;">
+                            <option value="1">Last 1 day</option>
+                            <option value="5" selected>Last 5 days</option>
+                            <option value="7">Last 7 days</option>
+                            <option value="30">Last 30 days</option>
+                        </select>
+                        <div id="recordingsContainer" class="recordings-list">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>Loading recordings...</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label>Description</label>
-                        <textarea id="videoDescription" rows="4" placeholder="Optional description"></textarea>
+                        <textarea id="videoDescription" rows="3" placeholder="Optional description"></textarea>
                     </div>
 
                     <div class="form-group">
@@ -482,33 +475,21 @@
                         </select>
                     </div>
 
-                    <div class="form-group">
-                        <label>Playlist (Optional)</label>
-                        <select id="videoPlaylist" onchange="savePlaylistSelection()">
-                            <option value="">No playlist</option>
-                        </select>
-                    </div>
+                    <button type="submit" class="btn" id="publishBtn">Download &amp; Upload to YouTube</button>
 
-                    <div class="form-group">
-                        <label>Thumbnail Text (Hebrew)</label>
-                        <input type="text" id="thumbnailText" placeholder="Will be auto-generated" dir="rtl" readonly style="background-color: #f5f5f5;">
-                    </div>
-
-                    <button type="submit" class="btn" id="uploadBtn">Upload to YouTube</button>
-
-                    <div id="uploadProgress" style="display:none;">
-                        <div id="progressText" style="margin-top:20px; text-align:center; font-weight:600; color:#555;">Uploading to YouTube</div>
+                    <div id="publishProgress" style="display:none;">
+                        <div id="progressText" style="margin-top:20px; text-align:center; font-weight:600; color:#555;"></div>
                         <div class="progress" style="margin-top:8px;">
                             <div class="progress-bar" id="progressBar"></div>
                         </div>
                     </div>
-                    
-                    <div id="uploadSuccess" style="display:none; margin-top: 20px; padding: 20px; background: #d4edda; border: 2px solid #28a745; border-radius: 8px; text-align: center;">
-                        <h3 style="color: #155724; margin-top: 0;">✓ Upload Complete!</h3>
-                        <p id="uploadSuccessMessage" style="color: #155724; margin: 10px 0;"></p>
-                        <button type="button" class="btn" onclick="dismissUploadSuccess()" style="margin-top: 15px; background: #28a745;">OK</button>
-                    </div>
                 </form>
+
+                <div id="publishSuccess" style="display:none; padding: 20px; background: #d4edda; border: 2px solid #28a745; border-radius: 8px; text-align: center;">
+                    <h3 style="color: #155724; margin-top: 0;">✓ Published!</h3>
+                    <p id="publishSuccessMessage" style="color: #155724; margin: 10px 0;"></p>
+                    <button type="button" class="btn" onclick="dismissPublishSuccess()" style="margin-top: 15px; background: #28a745;">OK</button>
+                </div>
             </div>
 
             <!-- Settings Tab -->
@@ -569,15 +550,20 @@
 
     <script>
         let selectedRecording = null;
-        let selectedVideoFile = null;
-        let selectedRecordingInfo = null;
         let recordingsData = [];
+        let publishing = false;
+
+        function esc(text) {
+            const d = document.createElement('div');
+            d.textContent = text == null ? '' : String(text);
+            return d.innerHTML;
+        }
 
         // Tab switching
         function switchTab(tabName, event) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            
+
             if (event && event.target) {
                 event.target.classList.add('active');
             } else {
@@ -587,20 +573,15 @@
                 );
                 if (tabBtn) tabBtn.classList.add('active');
             }
-            
-            document.getElementById(`${tabName}-tab`).classList.add('active');
 
-            if (tabName === 'upload') {
-                loadPlaylists();
-                loadSavedValues();
-            }
+            document.getElementById(`${tabName}-tab`).classList.add('active');
         }
 
-        // Load recordings
+        // Load recordings; the most recent one is pre-selected
         async function loadRecordings() {
             const days = document.getElementById('daysFilter').value;
             const container = document.getElementById('recordingsContainer');
-            
+
             container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading recordings...</p></div>';
 
             try {
@@ -608,139 +589,58 @@
                 const data = await response.json();
 
                 if (data.success && data.recordings.length > 0) {
-                    recordingsData = data.recordings;
-                    container.innerHTML = data.recordings.map((rec, idx) => `
-                        <div class="recording-item" onclick="selectRecording(${idx}, this)">
-                            <h3>${rec.topic}</h3>
-                            <p>📅 ${new Date(rec.start_time).toLocaleString()} • ⏱️ ${rec.duration} min</p>
+                    recordingsData = [...data.recordings].sort((a, b) => b.start_time.localeCompare(a.start_time));
+                    container.innerHTML = recordingsData.map((rec, idx) => `
+                        <div class="recording-item" onclick="selectRecording(${idx})">
+                            <h3>${esc(rec.topic)}</h3>
+                            <p>📅 ${esc(new Date(rec.start_time).toLocaleString())} • ⏱️ ${esc(rec.duration)} min</p>
                         </div>
                     `).join('');
+                    const stillThere = recordingsData.findIndex(r => r.id === selectedRecording);
+                    selectRecording(stillThere >= 0 ? stillThere : 0);
                 } else {
+                    recordingsData = [];
+                    selectedRecording = null;
                     container.innerHTML = '<p>No recordings found in the selected time range.</p>';
                 }
             } catch (error) {
-                showAlert('Error loading recordings: ' + error.message, 'error');
+                showAlert('Error loading recordings: ' + esc(error.message), 'error');
                 container.innerHTML = '<p>Error loading recordings. Please try again.</p>';
             }
         }
 
-        function selectRecording(index, element) {
-            document.querySelectorAll('.recording-item').forEach(item => {
-                item.classList.remove('selected');
+        function selectRecording(index) {
+            document.querySelectorAll('.recording-item').forEach((item, i) => {
+                item.classList.toggle('selected', i === index);
             });
-            element.classList.add('selected');
-            
-            const recording = recordingsData[index];
-            selectedRecording = recording.id;
-            selectedRecordingInfo = {
-                topic: recording.topic,
-                startTime: recording.start_time,
-                duration: recording.duration
-            };
-            
-            document.getElementById('downloadBtn').style.display = 'block';
+            selectedRecording = recordingsData[index].id;
         }
 
-        async function downloadSelected() {
-            if (!selectedRecording) return;
-
-            const btn = document.getElementById('downloadBtn');
-            btn.disabled = true;
-            
-            // Show progress indicator
-            const originalText = btn.textContent;
-            let dots = 0;
-            const progressInterval = setInterval(() => {
-                dots = (dots + 1) % 4;
-                btn.textContent = 'Downloading' + '.'.repeat(dots);
-            }, 500);
-
-            try {
-                const response = await fetch('/api/download', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({recording_id: selectedRecording})
-                });
-
-                const data = await response.json();
-
-                clearInterval(progressInterval);
-
-                if (data.success) {
-                    const message = data.already_exists 
-                        ? '✓ Recording already downloaded (using existing file)'
-                        : '✓ Recording downloaded successfully!';
-                    showAlert(message, 'success');
-                    
-                    // Store the filepath for upload
-                    selectedVideoFile = data.filepath;
-                    
-                    // Display recording info in upload tab
-                    showDownloadedRecordingInfo();
-                    
-                    switchTab('upload');
-                } else {
-                    showAlert('Error: ' + data.error, 'error');
-                }
-            } catch (error) {
-                clearInterval(progressInterval);
-                showAlert('Error downloading: ' + error.message, 'error');
-            } finally {
-                clearInterval(progressInterval);
-                btn.disabled = false;
-                btn.textContent = originalText;
-            }
-        }
-
-        // Show downloaded recording info
-        function showDownloadedRecordingInfo() {
-            if (selectedRecordingInfo) {
-                const infoDiv = document.getElementById('downloadedRecordingInfo');
-                const infoText = document.getElementById('recordingInfoText');
-                
-                const dateTime = new Date(selectedRecordingInfo.startTime).toLocaleString();
-                infoText.innerHTML = `<strong>${selectedRecordingInfo.topic}</strong><br>` +
-                                    `📅 ${dateTime} • ⏱️ ${selectedRecordingInfo.duration} minutes`;
-                
-                infoDiv.style.display = 'block';
-            }
-        }
-
-        // Update title and thumbnail based on מסכת and דף
-        function updateTitleAndThumbnail() {
+        // Title is derived from מסכת and דף (the server builds the same one)
+        function updateTitle() {
             const masechet = document.getElementById('masechetSelect').value;
-            const daf = document.getElementById('dafInput').value;
-            
-            if (masechet && daf) {
-                // Format: מסכת | דף | בית כנסת נריה
-                const title = `${masechet} | ${daf} | בית כנסת נריה`;
-                document.getElementById('videoTitle').value = title;
-                
-                // Format: מסכת - דף
-                const thumbnail = `${masechet} - ${daf}`;
-                document.getElementById('thumbnailText').value = thumbnail;
-                
-                // Save to localStorage
-                localStorage.setItem('lastMasechet', masechet);
-                localStorage.setItem('lastDaf', daf);
-            }
+            const daf = document.getElementById('dafInput').value.trim();
+
+            // Format: מסכת | דף | בית כנסת נריה
+            document.getElementById('videoTitle').value =
+                masechet && daf ? `${masechet} | ${daf} | בית כנסת נריה` : '';
+
+            localStorage.setItem('lastMasechet', masechet);
+            localStorage.setItem('lastDaf', daf);
         }
-        
+
         // Load saved מסכת and דף
         function loadSavedValues() {
             const savedMasechet = localStorage.getItem('lastMasechet');
             const savedDaf = localStorage.getItem('lastDaf');
-            
+
             if (savedMasechet) {
                 document.getElementById('masechetSelect').value = savedMasechet;
             }
             if (savedDaf) {
                 document.getElementById('dafInput').value = savedDaf;
             }
-            
-            if (savedMasechet && savedDaf) {
-                updateTitleAndThumbnail();
-            }
+            updateTitle();
         }
 
         // Save playlist selection to localStorage
@@ -760,11 +660,11 @@
                 if (data.success) {
                     const select = document.getElementById('videoPlaylist');
                     select.innerHTML = '<option value="">No playlist</option>' +
-                        data.playlists.map(pl => `<option value="${pl.id}">${pl.title} (${pl.item_count} videos)</option>`).join('');
-                    
+                        data.playlists.map(pl => `<option value="${esc(pl.id)}">${esc(pl.title)} (${esc(pl.item_count)} videos)</option>`).join('');
+
                     // Load saved playlist selection
                     const savedPlaylistId = localStorage.getItem('lastPlaylistId');
-                    
+
                     if (savedPlaylistId) {
                         // If there's a saved selection, use it
                         select.value = savedPlaylistId;
@@ -782,131 +682,133 @@
             }
         }
 
-        // Preview thumbnail
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const PHASE_TEXT = {
+            queued: 'Starting',
+            downloading: 'Downloading from Zoom',
+            uploading: 'Uploading to YouTube'
+        };
 
-        // Handle upload
-        async function handleUpload(event) {
+        // Poll a publish job until it finishes. A dropped connection or proxy hiccup does not
+        // end the job on the server, so keep asking for up to 2 hours.
+        async function waitForJob(jobId, onStatus) {
+            const deadline = Date.now() + 2 * 60 * 60 * 1000;
+            while (Date.now() < deadline) {
+                await sleep(3000);
+                let data;
+                try {
+                    const response = await fetch(`/api/publish/${encodeURIComponent(jobId)}`);
+                    if (response.status === 401) throw new Error('Session expired - please log in again.');
+                    data = await response.json();
+                    if (response.status === 404) {
+                        throw new Error('Lost track of the job (the server may have restarted). Check YouTube Studio before retrying.');
+                    }
+                } catch (error) {
+                    if (error instanceof TypeError || error instanceof SyntaxError) continue;  // network/proxy blip
+                    throw error;
+                }
+                if (!data.success) continue;
+                onStatus(data.job);
+                if (data.job.status === 'succeeded') return data.job;
+                if (data.job.status === 'failed') throw new Error(data.job.error || 'Publishing failed');
+            }
+            throw new Error('Timed out waiting for the job. Check YouTube Studio before retrying.');
+        }
+
+        // Download from Zoom and upload to YouTube in one go
+        async function handlePublish(event) {
             event.preventDefault();
+            if (publishing) return;
 
-            if (!selectedVideoFile) {
-                showAlert('Please download a recording first', 'error');
+            const body = {
+                masechet: document.getElementById('masechetSelect').value,
+                daf: document.getElementById('dafInput').value.trim(),
+                playlist_id: document.getElementById('videoPlaylist').value || null,
+                recording_id: selectedRecording,
+                description: document.getElementById('videoDescription').value,
+                privacy: document.getElementById('videoPrivacy').value
+            };
+            if (!selectedRecording) {
+                showAlert('No Zoom recording selected', 'error');
                 return;
             }
 
-            const formData = {
-                video_file: selectedVideoFile,
-                title: document.getElementById('videoTitle').value,
-                description: document.getElementById('videoDescription').value,
-                privacy: document.getElementById('videoPrivacy').value,
-                playlist_id: document.getElementById('videoPlaylist').value || null,
-                thumbnail_text: document.getElementById('thumbnailText').value
-            };
-
-            const progressDiv = document.getElementById('uploadProgress');
+            const progressDiv = document.getElementById('publishProgress');
             const progressBar = document.getElementById('progressBar');
-            const uploadBtn = document.getElementById('uploadBtn');
-
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Uploading...';
-            progressDiv.style.display = 'block';
-            progressBar.style.width = '10%';
             const progressText = document.getElementById('progressText');
-            progressText.textContent = 'Uploading to YouTube';
+            const publishBtn = document.getElementById('publishBtn');
+
+            publishing = true;
+            publishBtn.disabled = true;
+            publishBtn.textContent = 'Publishing...';
+            progressDiv.style.display = 'block';
             progressBar.classList.add('active');
-            
-            // Animate progress bar while uploading
+            progressBar.style.width = '10%';
+            progressText.textContent = PHASE_TEXT.queued;
+
+            // Phase label with animated dots; the bar creeps toward 90% (never full until done)
+            let phase = 'queued';
             let progress = 10;
             let dots = 0;
-            const uploadInterval = setInterval(() => {
+            const ticker = setInterval(() => {
                 dots = (dots + 1) % 4;
-                const dotString = '.'.repeat(dots);
-                progressText.textContent = 'Uploading to YouTube' + dotString;
-                
-                // Gradually increase progress to 90% (never reach 100 until done)
+                progressText.textContent = (PHASE_TEXT[phase] || 'Working') + '.'.repeat(dots);
                 if (progress < 90) {
-                    progress += Math.random() * 3;
+                    progress += Math.random() * 1.5;
                     progressBar.style.width = Math.min(progress, 90) + '%';
                 }
             }, 500);
 
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/publish', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(formData)
+                    body: JSON.stringify(body)
                 });
-
                 const data = await response.json();
-                
-                // Stop animation
-                clearInterval(uploadInterval);
-                progressBar.classList.remove('active');
+                if (!data.success) throw new Error(data.error || `HTTP ${response.status}`);
+
+                const job = data.job.status === 'succeeded'
+                    ? data.job
+                    : await waitForJob(data.job.id, j => { phase = j.status; });
 
                 progressBar.style.width = '100%';
-                progressText.textContent = 'Complete!';
-
-                // Hide progress bar
-                setTimeout(() => {
-                    progressDiv.style.display = 'none';
-                    progressBar.style.width = '0%';
-                }, 1000);
-
-                if (data.success) {
-                    // Show persistent success message
-                    const successDiv = document.getElementById('uploadSuccess');
-                    const successMsg = document.getElementById('uploadSuccessMessage');
-                    successMsg.innerHTML = `Video has been uploaded and deleted from storage.<br><br>` +
-                                          `<div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">` +
-                                          `<a href="${data.video_url}" target="_blank" style="color: #155724; font-weight: bold; text-decoration: underline;">View on YouTube</a>` +
-                                          `<button type="button" onclick="copyToClipboard('${data.video_url}')" class="btn" style="padding: 5px 15px; font-size: 0.9rem; background: #155724;">Copy URL</button>` +
-                                          `</div>`;
-                    successDiv.style.display = 'block';
-                    
-                    // Hide the form and uploaded recording info
-                    document.getElementById('uploadForm').querySelector('button[type="submit"]').style.display = 'none';
-                    document.querySelectorAll('#uploadForm .form-group').forEach(el => el.style.display = 'none');
-                    document.getElementById('downloadedRecordingInfo').style.display = 'none';
-                } else {
-                    const detail = data.error || data.message || `HTTP ${response.status}`;
-                    const timedOut = [502, 503, 504].includes(response.status) ||
-                        /timed out|timeout/i.test(detail);
-                    showAlert(timedOut
-                        ? `Request timed out (${detail}). The upload may still have succeeded - check your YouTube Studio before retrying.`
-                        : 'Error: ' + detail, 'error');
-                    uploadBtn.disabled = false;
-                    uploadBtn.textContent = 'Upload to YouTube';
-                }
+                showPublishSuccess(job);
             } catch (error) {
-                clearInterval(uploadInterval);
+                showAlert('Error: ' + esc(error.message), 'error');
+                publishBtn.disabled = false;
+                publishBtn.textContent = 'Download & Upload to YouTube';
+            } finally {
+                clearInterval(ticker);
                 progressBar.classList.remove('active');
-                showAlert('Error uploading: ' + error.message, 'error');
                 progressDiv.style.display = 'none';
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = 'Upload to YouTube';
+                progressBar.style.width = '0%';
+                publishing = false;
             }
         }
 
-        // Dismiss upload success and reset UI
-        function dismissUploadSuccess() {
-            // Hide success message
-            document.getElementById('uploadSuccess').style.display = 'none';
-            
-            // Reset form and show it again
-            document.getElementById('uploadForm').reset();
-            document.getElementById('uploadForm').querySelector('button[type="submit"]').style.display = 'block';
-            document.querySelectorAll('#uploadForm .form-group').forEach(el => el.style.display = 'block');
-            
-            // Clear state
-            selectedVideoFile = null;
-            selectedRecording = null;
-            selectedRecordingInfo = null;
-            
-            // Reload saved values (מסכת, דף, and playlist)
-            loadSavedValues();
-            loadPlaylists();
-            
-            // Go back to recordings tab
-            switchTab('recordings');
+        function showPublishSuccess(job) {
+            const note = job.already_published
+                ? 'This recording was already published earlier.'
+                : 'The recording was downloaded from Zoom, uploaded to YouTube and deleted from the server.';
+            document.getElementById('publishSuccessMessage').innerHTML = `${note}<br><br>` +
+                `<div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px;">` +
+                `<a href="${esc(job.video_url)}" target="_blank" style="color: #155724; font-weight: bold; text-decoration: underline;">View on YouTube</a>` +
+                `<button type="button" onclick="copyToClipboard('${esc(job.video_url)}')" class="btn" style="padding: 5px 15px; font-size: 0.9rem; background: #155724;">Copy URL</button>` +
+                `</div>`;
+            document.getElementById('publishForm').style.display = 'none';
+            document.getElementById('publishSuccess').style.display = 'block';
+        }
+
+        // Dismiss the success message and get the form ready for the next recording
+        function dismissPublishSuccess() {
+            document.getElementById('publishSuccess').style.display = 'none';
+            document.getElementById('publishForm').style.display = 'block';
+            document.getElementById('videoDescription').value = '';
+            const publishBtn = document.getElementById('publishBtn');
+            publishBtn.disabled = false;
+            publishBtn.textContent = 'Download & Upload to YouTube';
+            loadRecordings();
         }
 
         // Copy text to clipboard
@@ -1031,8 +933,9 @@
 
         // Load recordings on page load
         window.addEventListener('DOMContentLoaded', () => {
-            loadRecordings();
             loadSavedValues();
+            loadPlaylists();
+            loadRecordings();
         });
     </script>
 </body>

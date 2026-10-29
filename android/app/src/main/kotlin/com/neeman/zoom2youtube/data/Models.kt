@@ -9,8 +9,6 @@ data class Recording(
 
 data class Playlist(val id: String, val title: String, val itemCount: Int)
 
-data class DownloadResult(val filepath: String, val alreadyExists: Boolean)
-
 data class UploadResult(val videoId: String, val videoUrl: String)
 
 class ApiException(
